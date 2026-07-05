@@ -121,7 +121,9 @@ async function resolveFromFeed(
     process.platform === "win32"
       ? links.find((l) => l.name.endsWith(".nupkg"))
       : process.platform === "darwin"
-        ? links.find((l) => l.name.includes("darwin") && l.name.endsWith(".zip"))
+        ? links.find(
+            (l) => l.name.includes("darwin") && l.name.endsWith(".zip"),
+          )
         : links.find((l) => l.name.endsWith(`_${linuxArch()}.tar.gz`));
   if (!link) {
     throw new Error(
