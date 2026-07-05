@@ -141,3 +141,12 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Playwright / e2e output
+/test-results/
+/playwright-report/
+/playwright/.cache/
+/blob-report/
+
+# Downloaded app builds
+/artifacts/
