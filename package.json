@@ -15,10 +15,12 @@
   "type": "commonjs",
   "scripts": {
     "fetch": "tsx scripts/fetch-artifact.ts",
+    "fetch:canary": "tsx scripts/fetch-artifact.ts canary",
     "test": "playwright test",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
     "report": "playwright show-report",
+    "clean": "node -e \"['artifacts','test-results','playwright-report'].forEach(d=>require('fs').rmSync(d,{recursive:true,force:true}))\"",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

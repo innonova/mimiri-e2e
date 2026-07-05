@@ -18,16 +18,16 @@
       ],
       "canary": [
         {
-          "url": "https://update.mimiri.io/electron-win.2.6.4.json",
-          "name": "electron-win.2.6.4.json"
+          "url": "https://update.mimiri.io/electron-win.2.6.6.json",
+          "name": "electron-win.2.6.6.json"
         },
         {
-          "url": "https://update.mimiri.io/Mimiri Notes-2.6.4 Setup.exe",
-          "name": "Mimiri Notes-2.6.4 Setup.exe"
+          "url": "https://update.mimiri.io/Mimiri Notes-2.6.6 Setup.exe",
+          "name": "Mimiri Notes-2.6.6 Setup.exe"
         },
         {
-          "url": "https://update.mimiri.io/mimiri_notes-2.6.4-full.nupkg",
-          "name": "mimiri_notes-2.6.4-full.nupkg"
+          "url": "https://update.mimiri.io/mimiri_notes-2.6.6-full.nupkg",
+          "name": "mimiri_notes-2.6.6-full.nupkg"
         }
       ],
       "stable": [
@@ -117,20 +117,20 @@
           "name": "io.mimiri.notes_2.6.4_arm64.flatpak"
         },
         {
-          "url": "https://update.mimiri.io/mimiri-notes_2.6.4_amd64.tar.gz",
-          "name": "mimiri-notes_2.6.4_amd64.tar.gz"
+          "url": "https://update.mimiri.io/mimiri-notes_2.6.5_amd64.tar.gz",
+          "name": "mimiri-notes_2.6.5_amd64.tar.gz"
         },
         {
-          "url": "https://update.mimiri.io/mimiri-notes_2.6.4_amd64.snap",
-          "name": "mimiri-notes_2.6.4_amd64.snap"
+          "url": "https://update.mimiri.io/mimiri-notes_2.6.5_amd64.snap",
+          "name": "mimiri-notes_2.6.5_amd64.snap"
         },
         {
-          "url": "https://update.mimiri.io/mimiri-notes_2.6.4_amd64.AppImage",
-          "name": "mimiri-notes_2.6.4_amd64.AppImage"
+          "url": "https://update.mimiri.io/mimiri-notes_2.6.5_amd64.AppImage",
+          "name": "mimiri-notes_2.6.5_amd64.AppImage"
         },
         {
-          "url": "https://update.mimiri.io/io.mimiri.notes_2.6.4_amd64.flatpak",
-          "name": "io.mimiri.notes_2.6.4_amd64.flatpak"
+          "url": "https://update.mimiri.io/io.mimiri.notes_2.6.5_amd64.flatpak",
+          "name": "io.mimiri.notes_2.6.5_amd64.flatpak"
         }
       ],
       "stable": [
@@ -186,16 +186,16 @@
       ],
       "canary": [
         {
-          "url": "https://update.mimiri.io/electron-darwin.2.6.4.json",
-          "name": "electron-darwin.2.6.4.json"
+          "url": "https://update.mimiri.io/electron-darwin.2.6.5.json",
+          "name": "electron-darwin.2.6.5.json"
         },
         {
-          "url": "https://update.mimiri.io/Mimiri Notes-2.6.4-universal.dmg",
-          "name": "Mimiri Notes-2.6.4-universal.dmg"
+          "url": "https://update.mimiri.io/Mimiri Notes-2.6.5-universal.dmg",
+          "name": "Mimiri Notes-2.6.5-universal.dmg"
         },
         {
-          "url": "https://update.mimiri.io/Mimiri Notes-darwin-universal-2.6.4.zip",
-          "name": "Mimiri Notes-darwin-universal-2.6.4.zip"
+          "url": "https://update.mimiri.io/Mimiri Notes-darwin-universal-2.6.5.zip",
+          "name": "Mimiri Notes-darwin-universal-2.6.5.zip"
         }
       ],
       "stable": [

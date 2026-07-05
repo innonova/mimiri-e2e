@@ -3,51 +3,30 @@
 End-to-end test suite for the Mimiri Electron application, built on
 [Playwright](https://playwright.dev/).
 
-## Prerequisites
+Downloads a published build (stable, canary or explicit version) from
+`update.mimiri.io`, runs a smoke test against it, and cleans up after itself.
+Supported platforms: Windows and Linux.
 
-- Node.js 20+
-- A packaged build of the app placed under `artifacts/<version>/`
-  (use `npm run fetch` to prepare it — currently a scaffold).
+## Usage
 
-## Setup
-
-```bash
+```sh
 npm install
-cp .env.example .env
+
+# fetch an app build into artifacts/<version>
+npm run fetch                # latest stable
+npm run fetch:canary         # latest canary
+npm run fetch -- 2.6.1       # explicit version
+
+# run the tests against the fetched build
+npm test
+
+# remove downloaded builds and test output
+npm run clean
 ```
 
-## Fetching the app artifact
+The tests run against the version recorded in `artifacts/current.json`
+(the last one fetched). Override with the `MIMIRI_VERSION` environment
+variable if multiple versions are fetched.
 
-```bash
-npm run fetch            # fetches the "current" version
-npm run fetch -- v1.2.3  # fetches a specific version
-```
-
-The suite expects the executable at the platform-specific path defined in
-[helpers/app.ts](helpers/app.ts).
-
-## Running tests
-
-```bash
-npm test                 # run the full suite
-npm run test:headed      # run with a visible window
-npm run test:ui          # open the Playwright UI runner
-npm run report           # open the last HTML report
-```
-
-## Project structure
-
-```
-helpers/       Shared test helpers (app launch, etc.)
-scripts/       Tooling scripts (artifact fetching, etc.)
-tests/         Playwright *.spec.ts test files
-artifacts/     Packaged app builds (git-ignored)
-```
-
-## Type checking & formatting
-
-```bash
-npm run typecheck        # tsc --noEmit
-npm run format           # prettier --write
-npm run format:check     # prettier --check
-```
+Each test run launches the app with an isolated temporary user data
+directory, which is deleted again when the run finishes.
