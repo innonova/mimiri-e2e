@@ -1,0 +1,56 @@
+name: e2e
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "Channel or version to test (stable | canary | x.y.z)"
+        required: false
+        default: "canary"
+  schedule:
+    # daily, catches new canary/stable publishes
+    - cron: "0 6 * * *"
+  push:
+    branches: [main]
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Allow unprivileged user namespaces (Electron sandbox)
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Fetch app build
+        run: npm run fetch -- ${{ github.event.inputs.channel || 'canary' }}
+
+      - name: Run smoke tests (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum npm test
+
+      - name: Run smoke tests (Windows)
+        if: runner.os == 'Windows'
+        run: npm test
+
+      - name: Upload report on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-${{ matrix.os }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
