@@ -103,15 +103,17 @@ export async function launchApp(
 
   // The app honors `--user-data-dir` natively since 2.6.6 (applied via
   // app.setPath in main.ts). For older builds, fall back to redirecting
-  // APPDATA (Windows) / XDG_CONFIG_HOME (Linux), which packaged Electron
-  // apps resolve `userData` from.
+  // the location Electron resolves `userData` from: APPDATA (Windows),
+  // XDG_CONFIG_HOME (Linux), HOME (macOS, via ~/Library).
   const isolationEnv: Record<string, string> = supportsUserDataDirFlag(
     meta.version,
   )
     ? {}
     : process.platform === "win32"
       ? { APPDATA: userDataDir }
-      : { XDG_CONFIG_HOME: userDataDir };
+      : process.platform === "darwin"
+        ? { HOME: userDataDir }
+        : { XDG_CONFIG_HOME: userDataDir };
 
   const child = spawn(
     executablePath,

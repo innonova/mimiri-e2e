@@ -53,6 +53,8 @@ function archiveNameForVersion(version: string): string {
       return `mimiri_notes-${version}-full.nupkg`;
     case "linux":
       return `mimiri-notes_${version}_${linuxArch()}.tar.gz`;
+    case "darwin":
+      return `Mimiri Notes-darwin-universal-${version}.zip`;
     default:
       throw new Error(`unsupported platform: ${process.platform}`);
   }
@@ -70,6 +72,15 @@ function executableRelPath(version: string): string {
       );
     case "linux":
       return path.join("artifacts", version, "mimiri-notes", "mimiri-notes");
+    case "darwin":
+      return path.join(
+        "artifacts",
+        version,
+        "Mimiri Notes.app",
+        "Contents",
+        "MacOS",
+        "mimiri-notes",
+      );
     default:
       throw new Error(`unsupported platform: ${process.platform}`);
   }
@@ -94,7 +105,12 @@ async function resolveFromFeed(
   }
   const feed = (await res.json()) as Feed;
 
-  const systemName = process.platform === "win32" ? "Windows" : "Linux";
+  const systemName =
+    process.platform === "win32"
+      ? "Windows"
+      : process.platform === "darwin"
+        ? "MacOS"
+        : "Linux";
   const system = feed.systems.find((s) => s.name === systemName);
   if (!system) {
     throw new Error(`no "${systemName}" entry in update feed`);
@@ -104,7 +120,9 @@ async function resolveFromFeed(
   const link =
     process.platform === "win32"
       ? links.find((l) => l.name.endsWith(".nupkg"))
-      : links.find((l) => l.name.endsWith(`_${linuxArch()}.tar.gz`));
+      : process.platform === "darwin"
+        ? links.find((l) => l.name.includes("darwin") && l.name.endsWith(".zip"))
+        : links.find((l) => l.name.endsWith(`_${linuxArch()}.tar.gz`));
   if (!link) {
     throw new Error(
       `no matching ${channel} artifact for ${systemName}/${process.arch} in update feed`,
@@ -140,6 +158,20 @@ function extract(archive: string, targetDir: string): void {
   console.log(`[fetch-artifact] extracting to ${targetDir}`);
   fs.rmSync(targetDir, { recursive: true, force: true });
   fs.mkdirSync(targetDir, { recursive: true });
+  if (process.platform === "darwin") {
+    // ditto preserves .app bundle structure (symlinks, resource forks,
+    // code signing metadata) more reliably than tar/unzip.
+    const result = spawnSync("ditto", ["-xk", archive, targetDir], {
+      stdio: "inherit",
+    });
+    if (result.error) {
+      throw result.error;
+    }
+    if (result.status !== 0) {
+      throw new Error(`ditto exited with status ${result.status}`);
+    }
+    return;
+  }
   // bsdtar (bundled with Windows 10+) transparently handles zip/nupkg;
   // GNU tar handles tar.gz on Linux. On Windows, use the system bsdtar
   // explicitly — a GNU tar earlier in PATH (e.g. from git-bash) can't read
@@ -178,7 +210,7 @@ async function main(): Promise<void> {
   } else if (/^\d+\.\d+\.\d+$/.test(arg)) {
     channel = "explicit";
     version = arg;
-    url = `${UPDATE_HOST}/${archiveNameForVersion(version)}`;
+    url = `${UPDATE_HOST}/${encodeURIComponent(archiveNameForVersion(version))}`;
   } else {
     throw new Error(
       `invalid argument "${arg}" — expected "stable", "canary" or a version like 2.6.1`,

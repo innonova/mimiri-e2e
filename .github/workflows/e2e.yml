@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -41,8 +41,8 @@ jobs:
         if: runner.os == 'Linux'
         run: xvfb-run --auto-servernum npm test
 
-      - name: Run smoke tests (Windows)
-        if: runner.os == 'Windows'
+      - name: Run smoke tests (Windows, macOS)
+        if: runner.os != 'Linux'
         run: npm test
 
       - name: Upload report on failure
