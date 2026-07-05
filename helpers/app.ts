@@ -79,6 +79,12 @@ export function loadMeta(version?: string): ArtifactMeta {
   return JSON.parse(fs.readFileSync(metaFile, "utf8")) as ArtifactMeta;
 }
 
+/** Native --user-data-dir support landed in the client in 2.6.6. */
+function supportsUserDataDirFlag(version: string): boolean {
+  const [maj, min, pat] = version.split(".").map(Number);
+  return maj > 2 || (maj === 2 && (min > 6 || (min === 6 && pat >= 6)));
+}
+
 /**
  * Launches the packaged app and attaches over CDP.
  *
@@ -95,11 +101,15 @@ export async function launchApp(
   const userDataDir =
     opts.userDataDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "mimiri-e2e-")); // fresh by default
 
-  // Redirect the app's config location to the temp dir so each run starts
-  // clean and leaves no traces behind. Packaged Electron apps resolve
-  // `userData` from APPDATA (Windows) / XDG_CONFIG_HOME (Linux).
-  const isolationEnv: Record<string, string> =
-    process.platform === "win32"
+  // The app honors `--user-data-dir` natively since 2.6.6 (applied via
+  // app.setPath in main.ts). For older builds, fall back to redirecting
+  // APPDATA (Windows) / XDG_CONFIG_HOME (Linux), which packaged Electron
+  // apps resolve `userData` from.
+  const isolationEnv: Record<string, string> = supportsUserDataDirFlag(
+    meta.version,
+  )
+    ? {}
+    : process.platform === "win32"
       ? { APPDATA: userDataDir }
       : { XDG_CONFIG_HOME: userDataDir };
 
