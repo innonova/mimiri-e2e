@@ -31,24 +31,35 @@ variable if multiple versions are fetched.
 Each test run launches the app with an isolated temporary user data
 directory, which is deleted again when the run finishes.
 
-## Native file-dialog tests (Linux)
+## Native file-dialog tests (Linux, macOS)
 
 `tests/export-import.spec.ts` exercises the app's export/import features
 through **real native file dialogs**. Because the suite attaches to the
 published binary over CDP, Electron's `dialog` module cannot be stubbed, so
-the dialogs are driven for real: the app is launched with `GTK_USE_PORTAL=1`,
-which routes its GTK file choosers over D-Bus to `xdg-desktop-portal`; the
-dialog is then rendered by `xdg-desktop-portal-gtk` in a separate process and
-driven with `xdotool` (see `helpers/native-dialog.ts`).
+the dialogs are driven for real (`helpers/native-dialog.ts` dispatches to a
+per-platform driver):
 
-This needs an X server, a window manager and the portal stack. On a headless
-Linux machine, provision it once and run the suite under the wrapper:
+- **Linux** — the app is launched with `GTK_USE_PORTAL=1`, which routes its
+  GTK file choosers over D-Bus to `xdg-desktop-portal`; the dialog is
+  rendered by `xdg-desktop-portal-gtk` in a separate process and driven with
+  `xdotool`. Needs an X server, a window manager and the portal stack; on a
+  headless machine, provision once and run under the wrapper:
 
-```sh
-bash scripts/setup-linux-dialogs.sh          # one-time: apt packages + portal config
-bash scripts/run-with-dialogs.sh npm test    # Xvfb + openbox + portals, then the tests
-```
+  ```sh
+  bash scripts/setup-linux-dialogs.sh          # one-time: apt packages + portal config
+  bash scripts/run-with-dialogs.sh npm test    # Xvfb + openbox + portals, then the tests
+  ```
 
-The spec skips itself on Windows/macOS and on any Linux machine without
-`DISPLAY`/`xdotool`, so plain `npm test` stays green everywhere else. CI runs
-the whole suite through `scripts/run-with-dialogs.sh` on the Linux job.
+- **macOS** — the NSOpenPanel sheet is driven through System Events
+  (Cmd+Shift+G → path → confirm), and the app's native menu bar is used to
+  trigger export/import. The process running the tests needs the
+  **Automation (System Events)** and **Accessibility** permissions; over SSH
+  that means granting them to `sshd-keygen-wrapper` in System Settings →
+  Privacy & Security (macOS prompts on first use).
+
+- **Windows** — not implemented yet.
+
+The spec skips itself wherever these prerequisites are missing, so plain
+`npm test` stays green everywhere else. CI runs the whole suite through
+`scripts/run-with-dialogs.sh` on the Linux job; the GitHub macOS runners lack
+the TCC grants, so the dialog tests currently skip there.

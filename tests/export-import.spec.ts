@@ -13,30 +13,39 @@ import {
 import {
   nativeDialogSupport,
   waitForFileDialog,
-  acceptBookmarkedDirectory,
+  acceptDirectoryTarget,
   cancelDialog,
-  setDirectoryBookmark,
-  clearDirectoryBookmark,
+  prepareDirectoryTarget,
+  clearDirectoryTarget,
+  isPortalDialog,
 } from "../helpers/native-dialog";
 
 /**
- * Exercises export/import through REAL native file dialogs. On Linux the app
- * is launched with GTK_USE_PORTAL=1, so the dialogs go over D-Bus to
- * xdg-desktop-portal and are rendered by xdg-desktop-portal-gtk in a separate
- * process; xdotool drives them (see helpers/native-dialog.ts). Requires the
- * environment from scripts/run-with-dialogs.sh (X server, window manager,
- * portals) — the suite skips itself otherwise.
+ * Exercises export/import through REAL native file dialogs.
  *
- * Set MIMIRI_EXPECT_PORTAL=0 to allow a non-portal in-process GTK dialog
- * (e.g. on a desktop session without the portal stack).
+ * - Linux: the app is launched with GTK_USE_PORTAL=1, so the dialogs go over
+ *   D-Bus to xdg-desktop-portal and are rendered by xdg-desktop-portal-gtk in
+ *   a separate process; xdotool drives them. Requires the environment from
+ *   scripts/run-with-dialogs.sh (X server, window manager, portals).
+ * - macOS: NSOpenPanel sheets driven via System Events; requires the
+ *   Automation + Accessibility TCC grants.
+ * - Windows: not implemented yet.
+ *
+ * The suite skips itself where the platform prerequisites are missing, so
+ * plain `npm test` stays green everywhere.
+ *
+ * Set MIMIRI_EXPECT_PORTAL=0 to allow a non-portal in-process GTK dialog on
+ * Linux (e.g. on a desktop session without the portal stack).
  */
 
-const expectPortal = process.env.MIMIRI_EXPECT_PORTAL !== "0";
+const expectPortal =
+  process.platform === "linux" && process.env.MIMIRI_EXPECT_PORTAL !== "0";
 
 test.describe("export/import via native file dialogs", () => {
   test.skip(
     !nativeDialogSupport(),
-    "requires linux + DISPLAY + xdotool (run under scripts/run-with-dialogs.sh)",
+    "needs linux + DISPLAY + xdotool (see scripts/run-with-dialogs.sh) " +
+      "or macOS with automation permissions",
   );
 
   let ctx: AppContext;
@@ -50,32 +59,36 @@ test.describe("export/import via native file dialogs", () => {
 
   test.afterAll(async () => {
     await cleanup(ctx);
-    clearDirectoryBookmark();
+    clearDirectoryTarget();
     if (workRoot) {
       fs.rmSync(workRoot, { recursive: true, force: true });
     }
   });
 
   test.afterEach(() => {
-    clearDirectoryBookmark();
+    clearDirectoryTarget();
   });
 
   test("export all notes writes files through the native dialog", async () => {
-    await createRootNote(ctx.page, "Export Source One", "alpha body text");
-    await createRootNote(ctx.page, "Export Source Two");
+    await createRootNote(ctx, "Export Source One", "alpha body text");
+    await createRootNote(ctx, "Export Source Two");
 
     const exportDir = path.join(workRoot, "export-out");
     fs.mkdirSync(exportDir);
-    setDirectoryBookmark(exportDir);
+    prepareDirectoryTarget(exportDir);
 
-    await clickFileMenuItem(ctx.page, "export-notes");
-    const dialog = await waitForFileDialog({ titleHint: "Export All Notes" });
+    await clickFileMenuItem(ctx, "export-notes");
+    const dialog = await waitForFileDialog({
+      appPid: ctx.process.pid!,
+      titleHint: "Export All Notes",
+    });
     if (expectPortal) {
-      expect(dialog.viaPortal, "dialog should be served via D-Bus portal").toBe(
-        true,
-      );
+      expect(
+        isPortalDialog(dialog),
+        "dialog should be served via D-Bus portal",
+      ).toBe(true);
     }
-    await acceptBookmarkedDirectory(dialog);
+    await acceptDirectoryTarget(dialog, exportDir);
 
     await expectInfoDialog(
       ctx.page,
@@ -100,16 +113,20 @@ test.describe("export/import via native file dialogs", () => {
       path.join(importSrc, "Nested", "Charlie.md"),
       "charlie import content",
     );
-    setDirectoryBookmark(importSrc);
+    prepareDirectoryTarget(importSrc);
 
-    await clickFileMenuItem(ctx.page, "import-notes");
-    const dialog = await waitForFileDialog({ titleHint: "Import Notes" });
+    await clickFileMenuItem(ctx, "import-notes");
+    const dialog = await waitForFileDialog({
+      appPid: ctx.process.pid!,
+      titleHint: "Import Notes",
+    });
     if (expectPortal) {
-      expect(dialog.viaPortal, "dialog should be served via D-Bus portal").toBe(
-        true,
-      );
+      expect(
+        isPortalDialog(dialog),
+        "dialog should be served via D-Bus portal",
+      ).toBe(true);
     }
-    await acceptBookmarkedDirectory(dialog);
+    await acceptDirectoryTarget(dialog, importSrc);
 
     await expectInfoDialog(
       ctx.page,
@@ -141,10 +158,13 @@ test.describe("export/import via native file dialogs", () => {
   test("cancelling the native dialog leaves the app healthy", async () => {
     const untouched = path.join(workRoot, "untouched");
     fs.mkdirSync(untouched);
-    setDirectoryBookmark(untouched);
+    prepareDirectoryTarget(untouched);
 
-    await clickFileMenuItem(ctx.page, "export-notes");
-    const dialog = await waitForFileDialog({ titleHint: "Export All Notes" });
+    await clickFileMenuItem(ctx, "export-notes");
+    const dialog = await waitForFileDialog({
+      appPid: ctx.process.pid!,
+      titleHint: "Export All Notes",
+    });
     await cancelDialog(dialog);
 
     // No success (or any) dialog appears, nothing is written, app stays sane.
@@ -153,9 +173,12 @@ test.describe("export/import via native file dialogs", () => {
     expect(fs.readdirSync(untouched)).toHaveLength(0);
     expect(ctx.process.exitCode).toBeNull();
 
-    // The UI is still interactive: the File menu opens again.
-    await ctx.page.getByTestId("title-menu-file").click();
-    await expect(ctx.page.getByTestId("menu-export-notes")).toBeVisible();
-    await ctx.page.keyboard.press("Escape");
+    // The UI is still interactive: a fresh dialog can be opened and closed.
+    await clickFileMenuItem(ctx, "export-notes");
+    const again = await waitForFileDialog({
+      appPid: ctx.process.pid!,
+      titleHint: "Export All Notes",
+    });
+    await cancelDialog(again);
   });
 });
