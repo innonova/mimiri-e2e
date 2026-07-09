@@ -14,6 +14,13 @@ import {
   cancelMacDialog,
   MacNativeDialog,
 } from "./native-dialog-mac";
+import {
+  winDialogSupport,
+  waitForWinFileDialog,
+  selectWinDirectory,
+  cancelWinDialog,
+  WinNativeDialog,
+} from "./native-dialog-win";
 
 /**
  * Platform dispatcher for driving REAL native file dialogs.
@@ -23,12 +30,14 @@ import {
  *   places bookmark. Needs the scripts/run-with-dialogs.sh environment.
  * - macOS: NSOpenPanel sheets driven through System Events (Cmd+Shift+G).
  *   Needs the Automation + Accessibility TCC grants.
- * - Windows: not implemented yet.
+ * - Windows: the IFileDialog folder picker (owned by the app window) driven
+ *   through UI Automation + SendKeys. Needs an interactive desktop session.
  */
 
 export type NativeDialog =
   | ({ platform: "linux" } & LinuxNativeDialog)
-  | ({ platform: "darwin" } & MacNativeDialog);
+  | ({ platform: "darwin" } & MacNativeDialog)
+  | ({ platform: "win32" } & WinNativeDialog);
 
 /** True when this machine can drive native dialogs (test skip guard). */
 export function nativeDialogSupport(): boolean {
@@ -38,13 +47,16 @@ export function nativeDialogSupport(): boolean {
   if (process.platform === "darwin") {
     return macDialogSupport();
   }
+  if (process.platform === "win32") {
+    return winDialogSupport();
+  }
   return false;
 }
 
 /**
  * Registers `dir` as the pick target before the dialog opens. On Linux this
- * writes the GTK bookmark the driver later clicks; on macOS it is a no-op
- * (the path is typed into the Go-to-Folder sheet instead).
+ * writes the GTK bookmark the driver later clicks; on macOS/Windows it is a
+ * no-op (the path is typed into the dialog instead).
  */
 export function prepareDirectoryTarget(dir: string): void {
   if (process.platform === "linux") {
@@ -61,8 +73,8 @@ export function clearDirectoryTarget(): void {
 
 /**
  * Waits for the native directory-picker to appear. `appPid` is the app's
- * process id (needed on macOS to address the sheet); `titleHint` helps the
- * Linux fallback search.
+ * process id (used on macOS/Windows to locate the dialog); `titleHint` helps
+ * the Linux fallback search.
  */
 export async function waitForFileDialog(opts: {
   appPid: number;
@@ -80,6 +92,10 @@ export async function waitForFileDialog(opts: {
     const d = await waitForMacFileDialog(opts.appPid, opts.timeoutMs);
     return { platform: "darwin", ...d };
   }
+  if (process.platform === "win32") {
+    const d = await waitForWinFileDialog(opts.appPid, opts.timeoutMs);
+    return { platform: "win32", ...d };
+  }
   throw new Error(`native dialogs not supported on ${process.platform}`);
 }
 
@@ -90,8 +106,10 @@ export async function acceptDirectoryTarget(
 ): Promise<void> {
   if (dialog.platform === "linux") {
     await acceptBookmarkedDirectory(dialog);
-  } else {
+  } else if (dialog.platform === "darwin") {
     await selectMacDirectory(dialog, dir);
+  } else {
+    await selectWinDirectory(dialog, dir);
   }
 }
 
@@ -99,8 +117,10 @@ export async function acceptDirectoryTarget(
 export async function cancelDialog(dialog: NativeDialog): Promise<void> {
   if (dialog.platform === "linux") {
     await cancelLinux(dialog);
-  } else {
+  } else if (dialog.platform === "darwin") {
     await cancelMacDialog(dialog);
+  } else {
+    await cancelWinDialog(dialog);
   }
 }
 

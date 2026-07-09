@@ -57,10 +57,21 @@ per-platform driver):
   that means granting them to `sshd-keygen-wrapper` in System Settings →
   Privacy & Security (macOS prompts on first use).
 
-- **Windows** — not implemented yet.
+- **Windows** — the IFileDialog folder picker is an owned window nested under
+  the app's main window; it is located via UI Automation
+  (`NativeWindowHandle`) and driven with SendKeys (type path → Enter). This
+  needs an interactive desktop session. On a normal desktop login (or a CI
+  runner that provides one) run the tests directly. Over SSH you land in the
+  non-interactive session 0 with no desktop, so delegate to the logged-in
+  console session:
+
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File scripts\run-in-console.ps1 "npx.cmd playwright test"
+  ```
 
 The spec skips itself wherever these prerequisites are missing, so plain
 `npm test` stays green everywhere else. In CI the Linux job runs the whole
-suite through `scripts/run-with-dialogs.sh`, and the GitHub macOS runners
-allow the automation, so the dialog tests run there too. The Windows job
-runs smoke tests only until the Windows driver lands.
+suite through `scripts/run-with-dialogs.sh`; the GitHub macOS runners allow
+the automation, so the dialog tests run there too. Whether the Windows dialog
+tests run in CI depends on the runner providing an interactive session — they
+self-skip if it does not.
