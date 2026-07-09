@@ -30,3 +30,25 @@ variable if multiple versions are fetched.
 
 Each test run launches the app with an isolated temporary user data
 directory, which is deleted again when the run finishes.
+
+## Native file-dialog tests (Linux)
+
+`tests/export-import.spec.ts` exercises the app's export/import features
+through **real native file dialogs**. Because the suite attaches to the
+published binary over CDP, Electron's `dialog` module cannot be stubbed, so
+the dialogs are driven for real: the app is launched with `GTK_USE_PORTAL=1`,
+which routes its GTK file choosers over D-Bus to `xdg-desktop-portal`; the
+dialog is then rendered by `xdg-desktop-portal-gtk` in a separate process and
+driven with `xdotool` (see `helpers/native-dialog.ts`).
+
+This needs an X server, a window manager and the portal stack. On a headless
+Linux machine, provision it once and run the suite under the wrapper:
+
+```sh
+bash scripts/setup-linux-dialogs.sh          # one-time: apt packages + portal config
+bash scripts/run-with-dialogs.sh npm test    # Xvfb + openbox + portals, then the tests
+```
+
+The spec skips itself on Windows/macOS and on any Linux machine without
+`DISPLAY`/`xdotool`, so plain `npm test` stays green everywhere else. CI runs
+the whole suite through `scripts/run-with-dialogs.sh` on the Linux job.
