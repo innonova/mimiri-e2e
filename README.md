@@ -70,8 +70,7 @@ per-platform driver):
   ```
 
 The spec skips itself wherever these prerequisites are missing, so plain
-`npm test` stays green everywhere else. In CI the Linux job runs the whole
-suite through `scripts/run-with-dialogs.sh`; the GitHub macOS runners allow
-the automation, so the dialog tests run there too. Whether the Windows dialog
-tests run in CI depends on the runner providing an interactive session — they
-self-skip if it does not.
+`npm test` stays green everywhere else. In CI the dialog tests run on all
+three platforms: the Linux job wraps the suite in
+`scripts/run-with-dialogs.sh`, and the GitHub macOS and Windows runners both
+provide interactive sessions that allow the automation.
