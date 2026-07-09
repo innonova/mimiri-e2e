@@ -53,4 +53,5 @@ unset WAYLAND_DISPLAY
 unset ELECTRON_RUN_AS_NODE
 export GTK_USE_PORTAL="${GTK_USE_PORTAL:-1}"
 
-dbus-run-session -- "$0" --inner "$@"
+# Re-exec via bash so this also works without the executable bit set.
+dbus-run-session -- bash "$0" --inner "$@"
