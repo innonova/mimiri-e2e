@@ -60,6 +60,7 @@ per-platform driver):
 - **Windows** — not implemented yet.
 
 The spec skips itself wherever these prerequisites are missing, so plain
-`npm test` stays green everywhere else. CI runs the whole suite through
-`scripts/run-with-dialogs.sh` on the Linux job; the GitHub macOS runners lack
-the TCC grants, so the dialog tests currently skip there.
+`npm test` stays green everywhere else. In CI the Linux job runs the whole
+suite through `scripts/run-with-dialogs.sh`, and the GitHub macOS runners
+allow the automation, so the dialog tests run there too. The Windows job
+runs smoke tests only until the Windows driver lands.
