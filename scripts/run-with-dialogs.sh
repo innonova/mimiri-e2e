@@ -22,12 +22,23 @@ if [[ "${1:-}" == "--inner" ]]; then
   "$PORTAL_LIBEXEC/xdg-desktop-portal" &
   trap 'kill $(jobs -p) 2>/dev/null || true' EXIT
 
-  # Wait until the FileChooser portal answers on the bus.
-  for _ in $(seq 1 100); do
-    if gdbus call --session --dest org.freedesktop.portal.Desktop \
-        --object-path /org/freedesktop/portal/desktop \
-        --method org.freedesktop.DBus.Properties.Get \
-        org.freedesktop.portal.FileChooser version >/dev/null 2>&1; then
+  # Wait until the FileChooser portal is fully ready. GTK decides
+  # portal-vs-in-process once, at the first dialog, and caches it for the
+  # process lifetime; if the gtk *backend* implementation isn't registered
+  # yet, the first dialog falls back to an in-process chooser. So gate on
+  # both the frontend answering AND the gtk backend owning its bus name.
+  for _ in $(seq 1 150); do
+    frontend_ok=0
+    backend_ok=0
+    gdbus call --session --dest org.freedesktop.portal.Desktop \
+      --object-path /org/freedesktop/portal/desktop \
+      --method org.freedesktop.DBus.Properties.Get \
+      org.freedesktop.portal.FileChooser version >/dev/null 2>&1 && frontend_ok=1
+    gdbus call --session --dest org.freedesktop.DBus \
+      --object-path /org/freedesktop/DBus \
+      --method org.freedesktop.DBus.GetNameOwner \
+      org.freedesktop.impl.portal.desktop.gtk >/dev/null 2>&1 && backend_ok=1
+    if [ "$frontend_ok" = 1 ] && [ "$backend_ok" = 1 ]; then
       break
     fi
     sleep 0.1
