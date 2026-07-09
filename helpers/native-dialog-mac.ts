@@ -135,14 +135,13 @@ export async function selectMacDirectory(
   await waitSheetGone(pid, 8_000);
 }
 
-/** Dismisses the sheet via its Cancel button. */
+/** Dismisses the sheet with Escape (more robust than the Cancel button). */
 export async function cancelMacDialog(dialog: MacNativeDialog): Promise<void> {
   const { pid } = dialog;
-  const r = osa(
-    `tell application "System Events" to tell ${procRef(pid)} to click button "Cancel" of sheet 1 of window 1`,
+  osa(
+    `tell application "System Events" to set frontmost of ${procRef(pid)} to true`,
   );
-  if (!r.ok) {
-    throw new Error(`could not click Cancel: ${r.out}`);
-  }
+  await sleep(200);
+  osa(`tell application "System Events" to key code 53`); // Escape
   await waitSheetGone(pid, 5_000);
 }
