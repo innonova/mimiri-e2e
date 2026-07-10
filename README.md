@@ -65,8 +65,7 @@ the suite can test all four:
   systemd on the bus to create its tracking scope.
 
 In CI the Linux job runs once per format (see the matrix in
-`.github/workflows/e2e.yml`); the snap job is `continue-on-error` until it
-has proven itself stable.
+`.github/workflows/e2e.yml`).
 
 Each test run launches the app with an isolated temporary user data
 directory, which is deleted again when the run finishes.
