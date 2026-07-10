@@ -17,6 +17,9 @@ npm run fetch                # latest stable
 npm run fetch:canary         # latest canary
 npm run fetch -- 2.6.1       # explicit version
 
+# Linux only: pick a specific package format from the update feed
+npm run fetch -- canary --format=flatpak    # targz (default) | flatpak | appimage
+
 # run the tests against the fetched build
 npm test
 
@@ -24,9 +27,34 @@ npm test
 npm run clean
 ```
 
-The tests run against the version recorded in `artifacts/current.json`
-(the last one fetched). Override with the `MIMIRI_VERSION` environment
-variable if multiple versions are fetched.
+The tests run against the version and format recorded in
+`artifacts/current.json` (the last one fetched). Override with the
+`MIMIRI_VERSION` / `APP_FORMAT` environment variables if multiple
+artifacts are fetched.
+
+## Linux package formats
+
+The update feed ships Linux builds as tar.gz, flatpak, AppImage and snap.
+The suite can test the first three (snap not implemented yet):
+
+- **targz** — extracted under `artifacts/<version>/targz/` and executed in
+  place. The default everywhere.
+- **flatpak** — the single-file bundle is installed into the _user_ flatpak
+  installation (`flatpak install --user`); the runtime is resolved from
+  flathub, so the flathub remote must exist
+  (`scripts/setup-linux-dialogs.sh flatpak` sets both up). Only one version
+  can be installed at a time — fetch re-installs on version switches. The
+  app is launched with `flatpak run` (env passed as `--env=` flags, the temp
+  user-data dir granted via a per-run `--filesystem=` override) and torn
+  down with `flatpak kill io.mimiri.notes`. The flatpak sandbox has **no
+  filesystem grants**, so the export/import tests exercise the real
+  FileChooser + document portal path.
+- **appimage** — the `.AppImage` file is made executable and run directly,
+  which requires FUSE (`libfuse2`/`libfuse2t64`;
+  `scripts/setup-linux-dialogs.sh appimage` installs it).
+
+In CI the Linux job runs once per format (see the matrix in
+`.github/workflows/e2e.yml`).
 
 Each test run launches the app with an isolated temporary user data
 directory, which is deleted again when the run finishes.
