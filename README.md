@@ -80,10 +80,20 @@ published binary over CDP, Electron's `dialog` module cannot be stubbed, so
 the dialogs are driven for real (`helpers/native-dialog.ts` dispatches to a
 per-platform driver):
 
-- **Linux** — the app is launched with `GTK_USE_PORTAL=1`, which routes its
-  GTK file choosers over D-Bus to `xdg-desktop-portal`; the dialog is
-  rendered by `xdg-desktop-portal-gtk` in a separate process and driven with
-  `xdotool`. Needs an X server, a window manager and the portal stack; on a
+- **Linux** — the dialog is driven with `xdotool`, and each unsandboxed
+  format runs the export/import specs twice, once per delivery mode:
+  - **portal**: the chooser is served over D-Bus by `xdg-desktop-portal-gtk`
+    in a separate process. Chromium (≥ M145) prefers this whenever a
+    FileChooser portal is reachable, so it is what most desktop users get,
+    and flatpak/snap can only use it.
+    ([electron#50057](https://github.com/electron/electron/issues/50057))
+  - **gtk**: Electron's in-process GTK chooser — the fallback on
+    portal-less systems. Since Chromium's portal probe ignores
+    `GTK_USE_PORTAL`, the only way to reach this path is to make the portal
+    unreachable, so the app is launched with a dead `DBUS_SESSION_BUS_ADDRESS`.
+    Sandboxed formats skip this mode.
+
+  Both need an X server, a window manager and the portal stack; on a
   headless machine, provision once and run under the wrapper:
 
   ```sh

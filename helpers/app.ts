@@ -137,7 +137,10 @@ export async function launchApp(
     /** Package format to launch: targz | flatpak | appimage. */
     format?: string;
     userDataDir?: string;
-    /** Extra environment for the app process (e.g. GTK_USE_PORTAL). */
+    /**
+     * Extra environment for the app process (e.g. GTK_USE_PORTAL). An
+     * empty-string value removes the variable from the app's environment.
+     */
     env?: Record<string, string>;
   } = {},
 ): Promise<AppContext> {
@@ -172,16 +175,32 @@ export async function launchApp(
     "--remote-debugging-port=0",
     `--user-data-dir=${userDataDir}`,
   ];
-  const appEnv = { ...isolationEnv, ...opts.env, APP_TEST_MODE: "1" };
+  // An empty-string value in opts.env means "make sure this variable is NOT
+  // set for the app", even if the surrounding environment exports it (e.g.
+  // GTK_USE_PORTAL=1 from run-with-dialogs.sh).
+  const appEnv: Record<string, string> = {
+    ...isolationEnv,
+    ...opts.env,
+    APP_TEST_MODE: "1",
+  };
+  const unsetKeys = Object.keys(appEnv).filter((k) => appEnv[k] === "");
+  for (const k of unsetKeys) {
+    delete appEnv[k];
+  }
+  const mergedEnv = { ...process.env, ...appEnv };
+  for (const k of unsetKeys) {
+    delete mergedEnv[k];
+  }
 
   let child: ChildProcess;
   if (format === "flatpak") {
     assertFlatpakInstallMatches(meta);
     // `flatpak run` filters the caller's environment, so the app's env must
-    // travel as --env= flags. The temp user-data dir is outside the sandbox
-    // (the manifest grants no filesystem access) and needs a per-run
-    // --filesystem override. The bwrap client still gets process.env so it
-    // can reach DISPLAY and the session bus.
+    // travel as --env= flags (unset keys simply aren't forwarded). The temp
+    // user-data dir is outside the sandbox (the manifest grants no
+    // filesystem access) and needs a per-run --filesystem override. The
+    // bwrap client still gets process.env so it can reach DISPLAY and the
+    // session bus.
     child = spawn(
       "flatpak",
       [
@@ -200,7 +219,7 @@ export async function launchApp(
     // `snap run` passes the caller's environment through to the confined
     // app, so a plain env merge works (unlike flatpak).
     child = spawn("snap", ["run", meta.snapName ?? SNAP_NAME, ...appArgs], {
-      env: { ...process.env, ...appEnv },
+      env: mergedEnv,
       stdio: ["ignore", "pipe", "pipe"],
     });
   } else {
@@ -210,7 +229,7 @@ export async function launchApp(
       );
     }
     child = spawn(path.resolve(meta.executablePath), appArgs, {
-      env: { ...process.env, ...appEnv },
+      env: mergedEnv,
       stdio: ["ignore", "pipe", "pipe"],
     });
   }
