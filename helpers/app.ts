@@ -129,7 +129,7 @@ export function loadMeta(version?: string, format?: string): ArtifactMeta {
 }
 
 /** Whether `version` is at least maj.min.pat. */
-function versionAtLeast(
+export function versionAtLeast(
   version: string,
   maj: number,
   min: number,
@@ -164,6 +164,15 @@ export function supportsUpdateSeams(version: string): boolean {
  */
 export function supportsBundleRepair(version: string): boolean {
   return versionAtLeast(version, 2, 6, 12);
+}
+
+/**
+ * Flathub/snap-store detection (and the MIMIRI_FAKE_STORE test seam)
+ * landed in the shell in 2.6.13; the store-managed update UI needs a
+ * bundle >= 2.6.7 (testids + the store-managed check() branch).
+ */
+export function supportsStoreDetection(version: string): boolean {
+  return versionAtLeast(version, 2, 6, 13);
 }
 
 /**
