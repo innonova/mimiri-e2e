@@ -21,9 +21,10 @@ import { startUpdateServer, TestUpdateServer } from "../helpers/update-server";
  * the real Settings → Updates UI: check → download (signature verify,
  * install) → activate (window reload) → the app runs the new bundle.
  *
- * Runs on Linux (targz), Windows and macOS. The other Linux formats are
- * follow-up work (flatpak/snap store update flows are out of scope by
- * design).
+ * Runs on all platforms and Linux package formats. Note this exercises the
+ * in-app bundle updater, which works identically in store-managed formats —
+ * only the shell (electron) update is store-managed there; store update
+ * flows themselves are out of scope by design.
  */
 
 const SUPPORTED_PLATFORMS: string[] = ["linux", "win32", "darwin"];
@@ -37,7 +38,7 @@ test.describe("bundle update", () => {
       return;
     }
     const meta = loadMeta();
-    if (meta.format !== "targz" || !supportsUpdateSeams(meta.version)) {
+    if (!supportsUpdateSeams(meta.version)) {
       return;
     }
     const bundleJsonPath = path.resolve(
@@ -68,10 +69,6 @@ test.describe("bundle update", () => {
       "bundle-update test runs on Linux, Windows and macOS",
     );
     const meta = loadMeta();
-    test.skip(
-      meta.format !== "targz",
-      "bundle-update test currently targets the targz format only",
-    );
     test.skip(
       !supportsUpdateSeams(meta.version),
       "app predates the update seams (< 2.6.9)",

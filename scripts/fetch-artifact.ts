@@ -29,6 +29,7 @@ import {
   UPDATE_KEY_NAME,
   verifyBundleSignature,
 } from "../helpers/bundle-crypto";
+import { MAC_SHELL_BASE_VERSION } from "../helpers/mac-squirrel";
 
 const UPDATE_HOST = "https://update.mimiri.io";
 const ARTIFACTS_DIR = path.resolve("artifacts");
@@ -544,6 +545,18 @@ async function main(): Promise<void> {
     await download(
       `${UPDATE_HOST}/${encodeURIComponent(setupName)}`,
       path.join(DOWNLOADS_DIR, setupName),
+    );
+  }
+
+  if (process.platform === "darwin" && version !== MAC_SHELL_BASE_VERSION) {
+    // The macOS shell-update e2e test updates between two REAL signed
+    // releases (Squirrel.Mac validates the code signature, so a repacked
+    // fixture won't do): a pinned base version is installed, then updated
+    // to the fetched artifact's zip.
+    const baseName = archiveNameForVersion(MAC_SHELL_BASE_VERSION, format);
+    await download(
+      `${UPDATE_HOST}/${encodeURIComponent(baseName)}`,
+      path.join(DOWNLOADS_DIR, baseName),
     );
   }
 
