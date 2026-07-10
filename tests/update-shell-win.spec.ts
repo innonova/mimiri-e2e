@@ -69,8 +69,8 @@ test.describe("windows shell update", () => {
     ) {
       return;
     }
-    const shellNupkgPath = repackNupkg(artifacts.nupkg, SHELL_UPDATE_VERSION);
-    server = await startUpdateServer({ bundleJsonPath, shellNupkgPath });
+    const shellPackagePath = repackNupkg(artifacts.nupkg, SHELL_UPDATE_VERSION);
+    server = await startUpdateServer({ bundleJsonPath, shellPackagePath });
     installedExe = await installSquirrelApp(artifacts.setupExe, meta.version);
     ctx = await launchApp({
       executablePath: installedExe,

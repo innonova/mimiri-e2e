@@ -172,12 +172,14 @@ function infoFor(
 export async function startUpdateServer(opts: {
   bundleJsonPath: string;
   /**
-   * A Squirrel full nupkg to serve for Windows shell updates (typically the
-   * published package repacked to a higher version — see
-   * win-squirrel.ts::repackNupkg). Loaded, hashed and signed lazily on the
-   * first shell-update request.
+   * A Squirrel shell package to serve for shell updates: a full .nupkg on
+   * Windows (typically the published package repacked to a higher version —
+   * see win-squirrel.ts::repackNupkg) or a published darwin .zip on macOS
+   * (a genuinely newer release — Squirrel.Mac validates the code signature,
+   * so the payload must be a real signed build). Loaded, hashed and signed
+   * lazily on the first shell-update request.
    */
-  shellNupkgPath?: string;
+  shellPackagePath?: string;
 }): Promise<TestUpdateServer> {
   const bundle = JSON.parse(
     fs.readFileSync(opts.bundleJsonPath, "utf8"),
@@ -231,13 +233,13 @@ export async function startUpdateServer(opts: {
   const shellFixture = (): Promise<ShellFixture> => {
     if (!shellFixturePromise) {
       shellFixturePromise = (async () => {
-        if (!opts.shellNupkgPath) {
+        if (!opts.shellPackagePath) {
           throw new Error(
-            "update-server: shell update requested but no shellNupkgPath was configured",
+            "update-server: shell update requested but no shellPackagePath was configured",
           );
         }
-        const bytes = fs.readFileSync(opts.shellNupkgPath);
-        const fileName = path.basename(opts.shellNupkgPath);
+        const bytes = fs.readFileSync(opts.shellPackagePath);
+        const fileName = path.basename(opts.shellPackagePath);
         const sha1 = crypto
           .createHash("sha1")
           .update(bytes)
@@ -288,8 +290,10 @@ export async function startUpdateServer(opts: {
         res.end(body);
       };
 
-      const electronInfo = reqPath.match(/^\/electron-win\.(.+)\.json$/);
-      const nupkg = reqPath.match(/^\/(.+\.nupkg)$/);
+      const electronInfo = reqPath.match(
+        /^\/electron-(win|darwin)\.(.+)\.json$/,
+      );
+      const shellPackage = reqPath.match(/^\/(.+\.(nupkg|zip))$/);
       const fullBundle = reqPath.match(/^\/(.+)\.(\d+\.\d+\.\d+)\.json$/);
       const info = reqPath.match(/^\/(.+)\.(\d+\.\d+\.\d+)\.info\.json$/);
       const pointer = reqPath.match(/^\/(.+)\.(stable|canary)\.json$/);
@@ -316,17 +320,22 @@ export async function startUpdateServer(opts: {
           // feed: it takes the last path segment of the platform's .json
           // and installer links and fetches them from its own update host.
           const fixture = await shellFixture();
+          const os = fixture.fileName.endsWith(".zip") ? "darwin" : "win";
           const links = [
             {
-              url: `${base}/electron-win.${armedVersion}.json`,
-              name: `electron-win.${armedVersion}.json`,
+              url: `${base}/electron-${os}.${armedVersion}.json`,
+              name: `electron-${os}.${armedVersion}.json`,
             },
-            { url: `${base}/${fixture.fileName}`, name: fixture.fileName },
+            {
+              url: `${base}/${encodeURIComponent(fixture.fileName)}`,
+              name: fixture.fileName,
+            },
           ];
           json(
             JSON.stringify({
               systems: [
                 { name: "Windows", links, stable: links, canary: links },
+                { name: "MacOS", links, stable: links, canary: links },
               ],
             }),
           );
@@ -340,13 +349,18 @@ export async function startUpdateServer(opts: {
         const fixture = await shellFixture();
         json(
           JSON.stringify({
-            release: fixture.releasesLine,
+            // Windows stages a Squirrel RELEASES file from this; macOS
+            // treats it as the local file name for releases.json.
+            release:
+              electronInfo[1] === "win"
+                ? fixture.releasesLine
+                : fixture.fileName,
             size: fixture.bytes.length,
             signatureKey: UPDATE_KEY_NAME,
             signature: fixture.signature,
           }),
         );
-      } else if (nupkg) {
+      } else if (shellPackage) {
         const fixture = await shellFixture();
         res.writeHead(200, {
           "Content-Type": "application/octet-stream",
