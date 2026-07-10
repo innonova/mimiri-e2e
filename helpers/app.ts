@@ -281,7 +281,16 @@ function waitForDevToolsEndpoint(
     child.stdout?.on("data", onData);
     child.on("exit", (code) => {
       clearTimeout(timer);
-      reject(new Error(`app exited with code ${code} before CDP was ready`));
+      // The process may exit right after the exec fails, before its final
+      // stderr chunk is flushed to our handlers — give it a beat so the
+      // error includes what the app actually printed.
+      setTimeout(() => {
+        reject(
+          new Error(
+            `app exited with code ${code} before CDP was ready; app output:\n${output}`,
+          ),
+        );
+      }, 200);
     });
   });
 }
