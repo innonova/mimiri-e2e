@@ -149,6 +149,17 @@ export function supportsUpdateSeams(version: string): boolean {
 }
 
 /**
+ * Hardened bundle handling (verified promotion, health-checked activation,
+ * broken bundles fall back to base and self-repair) landed in the shell in
+ * 2.6.11 — but on slow machines its post-activation boot could still be
+ * interrupted by a watch dog navigation and wedge (seen on mac/win/snap
+ * CI); 2.6.12 adds the activation grace period that makes it reliable.
+ */
+export function supportsBundleRepair(version: string): boolean {
+  return versionAtLeast(version, 2, 6, 12);
+}
+
+/**
  * Launches the packaged app and attaches over CDP.
  *
  * Note: published Mimiri builds have the Node `--inspect` CLI flags fused

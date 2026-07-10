@@ -78,15 +78,28 @@ function mutateHash(hash: string): string {
  * constant appears as a template literal (`2.6.4`) in the built output;
  * the other quote forms are covered for future-proofing.
  *
- * Every modified .js asset is also RENAMED (its content hash mutated) and
- * all references to it rewritten, mimicking what a real build does — Vite
- * content-hashes asset names. Without this, the bundle would change file
- * contents behind unchanged app:// URLs, and Chromium's HTTP cache happily
- * serves the stale subresource after the activation reload (observed on
- * Windows), something no real update ever triggers.
+ * EVERY asset whose content changes — directly (the version rewrite) or
+ * transitively (a reference to a renamed asset rewritten inside it) — is
+ * also RENAMED and all references cascaded to a fixpoint, mimicking what a
+ * real content-hashed build does. A file changing content behind an
+ * unchanged app:// URL is a state no real update produces, and Chromium's
+ * caches happily serve the stale copy after the activation reload: seen
+ * once with the main chunk (stale page), and once more subtly with lazy
+ * chunks whose rewritten imports kept their old names — a cached lazy
+ * chunk then imported the OLD main chunk name and the app booted twice
+ * into one document.
  */
 function transformBundle(files: BundleFile[], from: string, to: string): void {
   const renames = new Map<string, string>();
+
+  const renameIfHashed = (file: BundleFile): void => {
+    const hashed = file.name.match(/^(.+)-([A-Za-z0-9_-]{6,16})\.js$/);
+    if (hashed) {
+      const newName = `${hashed[1]}-${mutateHash(hashed[2])}.js`;
+      renames.set(file.name, newName);
+      file.name = newName;
+    }
+  };
 
   const rewriteContents = (nodes: BundleFile[]): void => {
     for (const file of nodes) {
@@ -103,11 +116,45 @@ function transformBundle(files: BundleFile[], from: string, to: string): void {
             .join(`${quote}${to}${quote}`);
         }
         if (replaced !== text) {
-          const hashed = file.name.match(/^(.+)-([A-Za-z0-9_-]{6,16})\.js$/);
-          if (hashed) {
-            const newName = `${hashed[1]}-${mutateHash(hashed[2])}.js`;
-            renames.set(file.name, newName);
-            file.name = newName;
+          renameIfHashed(file);
+          file.content = gzipSync(Buffer.from(replaced, "utf8")).toString(
+            "base64",
+          );
+        }
+      }
+    }
+  };
+
+  /** One reference-rewrite sweep; returns whether it produced NEW renames. */
+  const rewriteReferences = (
+    nodes: BundleFile[],
+    pending: Map<string, string>,
+    next: Map<string, string>,
+  ): void => {
+    for (const file of nodes) {
+      if (file.files) {
+        rewriteReferences(file.files, pending, next);
+      } else if (isTextFile(file.name) && file.content) {
+        const text = gunzipSync(Buffer.from(file.content, "base64")).toString(
+          "utf8",
+        );
+        let replaced = text;
+        for (const [oldName, newName] of pending) {
+          replaced = replaced.split(oldName).join(newName);
+        }
+        if (replaced !== text) {
+          // Content changed → this file needs a new name too (unless it
+          // already got one this transform), and its own referrers need
+          // rewriting in the next sweep.
+          if (
+            !new Set(renames.values()).has(file.name) &&
+            !next.has(file.name)
+          ) {
+            const before = file.name;
+            renameIfHashed(file);
+            if (file.name !== before) {
+              next.set(before, file.name);
+            }
           }
           file.content = gzipSync(Buffer.from(replaced, "utf8")).toString(
             "base64",
@@ -117,30 +164,12 @@ function transformBundle(files: BundleFile[], from: string, to: string): void {
     }
   };
 
-  const rewriteReferences = (nodes: BundleFile[]): void => {
-    for (const file of nodes) {
-      if (file.files) {
-        rewriteReferences(file.files);
-      } else if (isTextFile(file.name) && file.content) {
-        const text = gunzipSync(Buffer.from(file.content, "base64")).toString(
-          "utf8",
-        );
-        let replaced = text;
-        for (const [oldName, newName] of renames) {
-          replaced = replaced.split(oldName).join(newName);
-        }
-        if (replaced !== text) {
-          file.content = gzipSync(Buffer.from(replaced, "utf8")).toString(
-            "base64",
-          );
-        }
-      }
-    }
-  };
-
   rewriteContents(files);
-  if (renames.size > 0) {
-    rewriteReferences(files);
+  let pending = new Map(renames);
+  while (pending.size > 0) {
+    const next = new Map<string, string>();
+    rewriteReferences(files, pending, next);
+    pending = next;
   }
 }
 
