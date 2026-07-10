@@ -536,6 +536,17 @@ async function main(): Promise<void> {
   // before bundle.json existed.
   await fetchBundleJson(version, channel);
 
+  if (process.platform === "win32") {
+    // The Squirrel Setup.exe performs a real install (%LOCALAPPDATA%),
+    // which the shell-update e2e test needs — the in-app updater only
+    // works from a Squirrel-installed layout (Update.exe next to app-*).
+    const setupName = `Mimiri Notes-${version} Setup.exe`;
+    await download(
+      `${UPDATE_HOST}/${encodeURIComponent(setupName)}`,
+      path.join(DOWNLOADS_DIR, setupName),
+    );
+  }
+
   fs.writeFileSync(
     path.join(ARTIFACTS_DIR, "current.json"),
     JSON.stringify({ version, format }, null, 2),

@@ -9,7 +9,7 @@ import {
   supportsUpdateSeams,
   AppContext,
 } from "../helpers/app";
-import { enterLocalMode } from "../helpers/ui";
+import { enterLocalMode, openCheckForUpdates } from "../helpers/ui";
 import { startUpdateServer, TestUpdateServer } from "../helpers/update-server";
 
 /**
@@ -21,17 +21,19 @@ import { startUpdateServer, TestUpdateServer } from "../helpers/update-server";
  * the real Settings → Updates UI: check → download (signature verify,
  * install) → activate (window reload) → the app runs the new bundle.
  *
- * Currently Linux targz only — the simplest launch path; other formats and
- * platforms are follow-up work (flatpak/snap store update flows are out of
- * scope by design).
+ * Runs on Linux (targz), Windows and macOS. The other Linux formats are
+ * follow-up work (flatpak/snap store update flows are out of scope by
+ * design).
  */
+
+const SUPPORTED_PLATFORMS: string[] = ["linux", "win32", "darwin"];
 
 test.describe("bundle update", () => {
   let ctx: AppContext | undefined;
   let server: TestUpdateServer | undefined;
 
   test.beforeAll(async () => {
-    if (process.platform !== "linux") {
+    if (!SUPPORTED_PLATFORMS.includes(process.platform)) {
       return;
     }
     const meta = loadMeta();
@@ -62,8 +64,8 @@ test.describe("bundle update", () => {
 
   test("app updates to a served bundle through the UI", async () => {
     test.skip(
-      process.platform !== "linux",
-      "bundle-update test is Linux-only for now",
+      !SUPPORTED_PLATFORMS.includes(process.platform),
+      "bundle-update test runs on Linux, Windows and macOS",
     );
     const meta = loadMeta();
     test.skip(
@@ -89,10 +91,7 @@ test.describe("bundle update", () => {
       await enterLocalMode(page);
       // Help → "Check for updates" opens the settings-update page (and runs
       // a check against the still-disarmed mock, which offers nothing).
-      await page.getByTestId("title-menu-help").click();
-      const item = page.getByTestId("menu-check-for-update");
-      await expect(item).toBeVisible();
-      await item.click();
+      await openCheckForUpdates(ctx!);
       await expect(page.getByTestId("update-mode-select")).toBeVisible();
       await expect(page.getByTestId("update-available")).not.toBeVisible();
     });
@@ -130,14 +129,21 @@ test.describe("bundle update", () => {
     });
 
     await test.step("activate and come back on the new bundle", async () => {
+      // Clear the HTTP cache before activating. If the post-activation boot
+      // is slow (VMs, CI), the shell's watchdog fires loadURL() mid-boot,
+      // and that navigation is served the CACHED pre-update index.html —
+      // resurrecting the old bundle. (Arguably a client bug: activation
+      // could clearCache() before reloading. Mitigate here for now.)
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send("Network.clearBrowserCache");
+      await cdp.detach();
       // Activation reloads the window; the CDP target survives the reload,
       // but the click's response may not arrive.
       await page
         .getByTestId("update-restart-button")
         .click({ noWaitAfter: true });
       await enterLocalMode(page);
-      await page.getByTestId("title-menu-help").click();
-      await page.getByTestId("menu-check-for-update").click();
+      await openCheckForUpdates(ctx!);
       await expect(page.getByTestId("update-current-version")).toHaveText(
         server!.bundleVersion,
         { timeout: 15_000 },

@@ -167,6 +167,12 @@ export async function launchApp(
      * empty-string value removes the variable from the app's environment.
      */
     env?: Record<string, string>;
+    /**
+     * Launch this executable instead of the artifact's extracted one —
+     * e.g. a Squirrel-installed copy for shell-update tests. targz-style
+     * formats only.
+     */
+    executablePath?: string;
   } = {},
 ): Promise<AppContext> {
   const meta = loadMeta(opts.version, opts.format);
@@ -248,12 +254,13 @@ export async function launchApp(
       stdio: ["ignore", "pipe", "pipe"],
     });
   } else {
-    if (!meta.executablePath) {
+    const executablePath = opts.executablePath ?? meta.executablePath;
+    if (!executablePath) {
       throw new Error(
         `artifact meta for ${meta.version} (${format}) has no executablePath`,
       );
     }
-    child = spawn(path.resolve(meta.executablePath), appArgs, {
+    child = spawn(path.resolve(executablePath), appArgs, {
       env: mergedEnv,
       stdio: ["ignore", "pipe", "pipe"],
     });

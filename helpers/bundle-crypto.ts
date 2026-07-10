@@ -101,6 +101,44 @@ export async function signBundle(
 }
 
 /**
+ * Signs raw bytes (e.g. a Squirrel nupkg) the way the client's
+ * CryptSignature.verifyRaw expects: RSASSA-PKCS1-v1_5/SHA-256 over the
+ * bytes, base64-encoded signature.
+ */
+export async function signRaw(
+  data: Uint8Array,
+  privateKey: webcrypto.CryptoKey,
+): Promise<string> {
+  const signature = await webcrypto.subtle.sign(
+    ALGORITHM.name,
+    privateKey,
+    new Uint8Array(data),
+  );
+  return Buffer.from(signature).toString("base64");
+}
+
+/** Counterpart of signRaw for self-checks, mirroring verifyRaw. */
+export async function verifyRawSignature(
+  signature: string,
+  data: Uint8Array,
+  publicKeyBase64: string,
+): Promise<boolean> {
+  const publicKey = await webcrypto.subtle.importKey(
+    "spki",
+    fromBase64(publicKeyBase64),
+    ALGORITHM,
+    false,
+    ["verify"],
+  );
+  return webcrypto.subtle.verify(
+    ALGORITHM.name,
+    publicKey,
+    fromBase64(signature),
+    new Uint8Array(data),
+  );
+}
+
+/**
  * Verifies the signature named `name` against a single-line base64 SPKI
  * public key, using the same payload construction as the client's
  * CryptSignature.verify.

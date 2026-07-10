@@ -1,13 +1,18 @@
 import http from "http";
 import fs from "fs";
+import path from "path";
+import crypto from "crypto";
 import { AddressInfo } from "net";
 import { gzipSync, gunzipSync } from "zlib";
 import {
   Bundle,
   BundleFile,
+  UPDATE_KEY_NAME,
   generateUpdateKeyPair,
   signBundle,
+  signRaw,
   verifyBundleSignature,
+  verifyRawSignature,
 } from "./bundle-crypto";
 
 /**
@@ -29,8 +34,15 @@ export interface TestUpdateServer {
   publicKeyBase64: string;
   /** The version the transformed bundle reports (TEST_BUNDLE_VERSION). */
   bundleVersion: string;
-  /** Arms (a version string) or disarms (null) the channel pointer. */
-  setLatest(version: string | null): void;
+  /**
+   * Arms (a version string) or disarms (null) the channel pointer. With
+   * `hostUpdate` the offered version's minElectronVersion* fields are set
+   * to the version itself (above any real shell), which sends the client
+   * down the shell-update path (latest.json → electron-<os>.<v>.json →
+   * installer package) instead of the plain bundle path. Requires
+   * `shellNupkgPath` to have been passed to startUpdateServer.
+   */
+  setLatest(version: string | null, opts?: { hostUpdate?: boolean }): void;
   /** Request paths observed, for debugging failed flows. */
   requests: string[];
   stop(): Promise<void>;
@@ -46,6 +58,18 @@ export const TEST_BUNDLE_VERSION = "99.0.0";
 /** Version the disarmed channel pointer offers — older than any release. */
 const DISARMED_VERSION = "0.0.1";
 
+const TEXT_EXTENSIONS = [".js", ".css", ".html", ".json", ".webmanifest"];
+
+function isTextFile(name: string): boolean {
+  return TEXT_EXTENSIONS.some((ext) => name.endsWith(ext));
+}
+
+/** A distinct same-length stand-in for a content hash in an asset name. */
+function mutateHash(hash: string): string {
+  const reversed = [...hash].reverse().join("");
+  return reversed === hash ? ("e2e" + hash).slice(0, hash.length) : reversed;
+}
+
 /**
  * Rewrites every quoted occurrence of the original version string inside the
  * bundle's .js files (file contents are gzip+base64). This changes the
@@ -53,41 +77,93 @@ const DISARMED_VERSION = "0.0.1";
  * after activation the app observably reports the new version. The stamped
  * constant appears as a template literal (`2.6.4`) in the built output;
  * the other quote forms are covered for future-proofing.
+ *
+ * Every modified .js asset is also RENAMED (its content hash mutated) and
+ * all references to it rewritten, mimicking what a real build does — Vite
+ * content-hashes asset names. Without this, the bundle would change file
+ * contents behind unchanged app:// URLs, and Chromium's HTTP cache happily
+ * serves the stale subresource after the activation reload (observed on
+ * Windows), something no real update ever triggers.
  */
-function rewriteVersion(files: BundleFile[], from: string, to: string): void {
-  for (const file of files) {
-    if (file.files) {
-      rewriteVersion(file.files, from, to);
-    } else if (file.name.endsWith(".js") && file.content) {
-      const text = gunzipSync(Buffer.from(file.content, "base64")).toString(
-        "utf8",
-      );
-      let replaced = text;
-      for (const quote of ['"', "'", "`"]) {
-        replaced = replaced
-          .split(`${quote}${from}${quote}`)
-          .join(`${quote}${to}${quote}`);
+function transformBundle(files: BundleFile[], from: string, to: string): void {
+  const renames = new Map<string, string>();
+
+  const rewriteContents = (nodes: BundleFile[]): void => {
+    for (const file of nodes) {
+      if (file.files) {
+        rewriteContents(file.files);
+      } else if (file.name.endsWith(".js") && file.content) {
+        const text = gunzipSync(Buffer.from(file.content, "base64")).toString(
+          "utf8",
+        );
+        let replaced = text;
+        for (const quote of ['"', "'", "`"]) {
+          replaced = replaced
+            .split(`${quote}${from}${quote}`)
+            .join(`${quote}${to}${quote}`);
+        }
+        if (replaced !== text) {
+          const hashed = file.name.match(/^(.+)-([A-Za-z0-9_-]{6,16})\.js$/);
+          if (hashed) {
+            const newName = `${hashed[1]}-${mutateHash(hashed[2])}.js`;
+            renames.set(file.name, newName);
+            file.name = newName;
+          }
+          file.content = gzipSync(Buffer.from(replaced, "utf8")).toString(
+            "base64",
+          );
+        }
       }
-      file.content = gzipSync(Buffer.from(replaced, "utf8")).toString("base64");
     }
+  };
+
+  const rewriteReferences = (nodes: BundleFile[]): void => {
+    for (const file of nodes) {
+      if (file.files) {
+        rewriteReferences(file.files);
+      } else if (isTextFile(file.name) && file.content) {
+        const text = gunzipSync(Buffer.from(file.content, "base64")).toString(
+          "utf8",
+        );
+        let replaced = text;
+        for (const [oldName, newName] of renames) {
+          replaced = replaced.split(oldName).join(newName);
+        }
+        if (replaced !== text) {
+          file.content = gzipSync(Buffer.from(replaced, "utf8")).toString(
+            "base64",
+          );
+        }
+      }
+    }
+  };
+
+  rewriteContents(files);
+  if (renames.size > 0) {
+    rewriteReferences(files);
   }
 }
 
 /**
- * The BundleInfo shape served for the channel pointer and .info.json. All
- * min versions are 0.0.0 so the client always takes the plain-bundle path,
- * never the host-update branch.
+ * The BundleInfo shape served for the channel pointer and .info.json.
+ * With minVersion 0.0.0 the client always takes the plain-bundle path;
+ * a minVersion above the shell's version sends it down the host-update
+ * (shell installer) branch instead.
  */
-function infoFor(bundle: Bundle, size: number): Record<string, unknown> {
+function infoFor(
+  bundle: Bundle,
+  size: number,
+  minVersion: string,
+): Record<string, unknown> {
   return {
     version: bundle.version,
     description: bundle.description ?? "",
     releaseDate: bundle.releaseDate,
     size,
-    minElectronVersion: "0.0.0",
-    minElectronVersionWin32: "0.0.0",
-    minElectronVersionDarwin: "0.0.0",
-    minElectronVersionLinux: "0.0.0",
+    minElectronVersion: minVersion,
+    minElectronVersionWin32: minVersion,
+    minElectronVersionDarwin: minVersion,
+    minElectronVersionLinux: minVersion,
     minIosVersion: "0.0.0",
     minAndroidVersion: "0.0.0",
   };
@@ -95,13 +171,20 @@ function infoFor(bundle: Bundle, size: number): Record<string, unknown> {
 
 export async function startUpdateServer(opts: {
   bundleJsonPath: string;
+  /**
+   * A Squirrel full nupkg to serve for Windows shell updates (typically the
+   * published package repacked to a higher version — see
+   * win-squirrel.ts::repackNupkg). Loaded, hashed and signed lazily on the
+   * first shell-update request.
+   */
+  shellNupkgPath?: string;
 }): Promise<TestUpdateServer> {
   const bundle = JSON.parse(
     fs.readFileSync(opts.bundleJsonPath, "utf8"),
   ) as Bundle;
   const originalVersion = bundle.version;
 
-  rewriteVersion(bundle.files, originalVersion, TEST_BUNDLE_VERSION);
+  transformBundle(bundle.files, originalVersion, TEST_BUNDLE_VERSION);
   bundle.version = TEST_BUNDLE_VERSION;
   bundle.releaseDate = new Date().toISOString();
 
@@ -131,12 +214,58 @@ export async function startUpdateServer(opts: {
   };
 
   let armedVersion: string | null = null;
+  let hostUpdateArmed = false;
+  let base = ""; // server base URL, set once listening
   const requests: string[] = [];
+
+  // Shell (Squirrel) update fixture, lazily prepared: the client verifies
+  // the raw installer bytes against ElectronInfo.signature, and Squirrel
+  // itself checks the SHA1 from the RELEASES line.
+  interface ShellFixture {
+    fileName: string;
+    bytes: Buffer;
+    releasesLine: string;
+    signature: string;
+  }
+  let shellFixturePromise: Promise<ShellFixture> | undefined;
+  const shellFixture = (): Promise<ShellFixture> => {
+    if (!shellFixturePromise) {
+      shellFixturePromise = (async () => {
+        if (!opts.shellNupkgPath) {
+          throw new Error(
+            "update-server: shell update requested but no shellNupkgPath was configured",
+          );
+        }
+        const bytes = fs.readFileSync(opts.shellNupkgPath);
+        const fileName = path.basename(opts.shellNupkgPath);
+        const sha1 = crypto
+          .createHash("sha1")
+          .update(bytes)
+          .digest("hex")
+          .toUpperCase();
+        const signature = await signRaw(bytes, keys.privateKey);
+        if (
+          !(await verifyRawSignature(signature, bytes, keys.publicKeyBase64))
+        ) {
+          throw new Error(
+            "update-server: self-verification of installer signature failed",
+          );
+        }
+        return {
+          fileName,
+          bytes,
+          releasesLine: `${sha1} ${fileName} ${bytes.length}`,
+          signature,
+        };
+      })();
+    }
+    return shellFixturePromise;
+  };
 
   const server = http.createServer((req, res) => {
     void (async () => {
-      const path = (req.url ?? "").split("?")[0];
-      requests.push(`${req.method} ${path}`);
+      const reqPath = (req.url ?? "").split("?")[0];
+      requests.push(`${req.method} ${reqPath}`);
 
       // The renderer origin is app://app.mimernotes.com and every request
       // carries the custom X-Mimiri-Version header, which forces a CORS
@@ -159,11 +288,15 @@ export async function startUpdateServer(opts: {
         res.end(body);
       };
 
-      const fullBundle = path.match(/^\/(.+)\.(\d+\.\d+\.\d+)\.json$/);
-      const info = path.match(/^\/(.+)\.(\d+\.\d+\.\d+)\.info\.json$/);
-      const pointer = path.match(/^\/(.+)\.(stable|canary)\.json$/);
+      const electronInfo = reqPath.match(/^\/electron-win\.(.+)\.json$/);
+      const nupkg = reqPath.match(/^\/(.+\.nupkg)$/);
+      const fullBundle = reqPath.match(/^\/(.+)\.(\d+\.\d+\.\d+)\.json$/);
+      const info = reqPath.match(/^\/(.+)\.(\d+\.\d+\.\d+)\.info\.json$/);
+      const pointer = reqPath.match(/^\/(.+)\.(stable|canary)\.json$/);
+      const minVersion = () =>
+        hostUpdateArmed && armedVersion ? armedVersion : "0.0.0";
 
-      if (path === "/changelog.canary.json") {
+      if (reqPath === "/changelog.canary.json") {
         // Served even when disarmed: updateChangeLog() runs at the end of
         // every check() and a 404 would abort it mid-flight.
         const versions = armedVersion
@@ -177,25 +310,66 @@ export async function startUpdateServer(opts: {
             ]
           : [];
         json(JSON.stringify({ versions }));
-      } else if (path === "/latest.json") {
-        // Only reached if the host-update branch is ever hit; serving the
-        // committed feed copy keeps that failure diagnosable rather than a
-        // hard 404 abort.
-        json(fs.readFileSync("latest.json", "utf8"));
+      } else if (reqPath === "/latest.json") {
+        if (hostUpdateArmed && armedVersion) {
+          // The client resolves the shell installer through the download
+          // feed: it takes the last path segment of the platform's .json
+          // and installer links and fetches them from its own update host.
+          const fixture = await shellFixture();
+          const links = [
+            {
+              url: `${base}/electron-win.${armedVersion}.json`,
+              name: `electron-win.${armedVersion}.json`,
+            },
+            { url: `${base}/${fixture.fileName}`, name: fixture.fileName },
+          ];
+          json(
+            JSON.stringify({
+              systems: [
+                { name: "Windows", links, stable: links, canary: links },
+              ],
+            }),
+          );
+        } else {
+          // Only reached if the host-update branch is hit unexpectedly;
+          // serving the committed feed copy keeps that failure diagnosable
+          // rather than a hard 404 abort.
+          json(fs.readFileSync("latest.json", "utf8"));
+        }
+      } else if (electronInfo) {
+        const fixture = await shellFixture();
+        json(
+          JSON.stringify({
+            release: fixture.releasesLine,
+            size: fixture.bytes.length,
+            signatureKey: UPDATE_KEY_NAME,
+            signature: fixture.signature,
+          }),
+        );
+      } else if (nupkg) {
+        const fixture = await shellFixture();
+        res.writeHead(200, {
+          "Content-Type": "application/octet-stream",
+          "Content-Length": fixture.bytes.length,
+        });
+        res.end(fixture.bytes);
       } else if (info) {
         const body = await signedBundle(info[1]);
-        json(JSON.stringify(infoFor(bundle, body.length)));
+        json(JSON.stringify(infoFor(bundle, body.length, minVersion())));
       } else if (fullBundle) {
         json(await signedBundle(fullBundle[1]));
       } else if (pointer) {
         const body = await signedBundle(pointer[1]);
         const pointerInfo = armedVersion
-          ? infoFor(bundle, body.length)
-          : { ...infoFor(bundle, body.length), version: DISARMED_VERSION };
+          ? infoFor(bundle, body.length, minVersion())
+          : {
+              ...infoFor(bundle, body.length, "0.0.0"),
+              version: DISARMED_VERSION,
+            };
         json(JSON.stringify(pointerInfo));
       } else {
         res.writeHead(404, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: `no route for ${path}` }));
+        res.end(JSON.stringify({ error: `no route for ${reqPath}` }));
       }
     })().catch((err) => {
       res.writeHead(500, { "Content-Type": "application/json" });
@@ -205,13 +379,15 @@ export async function startUpdateServer(opts: {
 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
+  base = `http://127.0.0.1:${port}`;
 
   return {
-    url: `http://127.0.0.1:${port}`,
+    url: base,
     publicKeyBase64: keys.publicKeyBase64,
     bundleVersion: TEST_BUNDLE_VERSION,
-    setLatest(version) {
+    setLatest(version, setOpts) {
       armedVersion = version;
+      hostUpdateArmed = !!version && !!setOpts?.hostUpdate;
     },
     requests,
     stop: () =>
