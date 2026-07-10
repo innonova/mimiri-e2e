@@ -55,8 +55,13 @@ test.describe("bundle repair", () => {
 
     // The broken state: active bundle dir exists with index.html and
     // info.json, but the assets index.html references are missing.
+    // Strict snap confinement has a private /tmp and the home interface
+    // excludes dotfiles, so for snap the dir must be a non-hidden path
+    // under $HOME (same constraint launchApp handles for its default dir).
     const userDataDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), "mimiri-e2e-repair-"),
+      meta.format === "snap"
+        ? path.join(os.homedir(), "mimiri-e2e-repair-")
+        : path.join(os.tmpdir(), "mimiri-e2e-repair-"),
     );
     const broken = path.join(userDataDir, "bundles", server.bundleVersion);
     fs.mkdirSync(path.join(broken, "assets"), { recursive: true });
