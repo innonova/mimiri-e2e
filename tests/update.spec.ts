@@ -133,6 +133,14 @@ test.describe("bundle update", () => {
     });
 
     await test.step("activate and come back on the new bundle", async () => {
+      // Clear the HTTP cache before activating. If the post-activation boot
+      // is slow (VMs, CI), the shell's watchdog fires loadURL() mid-boot,
+      // and that navigation is served the CACHED pre-update index.html —
+      // resurrecting the old bundle. (Arguably a client bug: activation
+      // could clearCache() before reloading. Mitigate here for now.)
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send("Network.clearBrowserCache");
+      await cdp.detach();
       // Activation reloads the window; the CDP target survives the reload,
       // but the click's response may not arrive.
       await page
