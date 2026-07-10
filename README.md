@@ -64,8 +64,10 @@ the suite can test all four:
   snap cannot reach a private bus socket, and `snap run` needs the user
   systemd on the bus to create its tracking scope.
 
-In CI the Linux job runs once per format (see the matrix in
-`.github/workflows/e2e.yml`).
+All formats are built for amd64 and arm64; the fetch script picks the
+artifact matching the host architecture. In CI the Linux job runs once per
+format on both amd64 (`ubuntu-latest`) and arm64 (`ubuntu-24.04-arm`)
+runners (see the matrix in `.github/workflows/e2e.yml`).
 
 Each test run launches the app with an isolated temporary user data
 directory, which is deleted again when the run finishes.

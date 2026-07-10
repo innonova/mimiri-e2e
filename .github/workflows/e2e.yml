@@ -20,7 +20,8 @@ jobs:
       fail-fast: false
       matrix:
         # macos pinned during the macos-latest 15→26 migration (runner-images#14167)
-        # Linux runs once per package format from the update feed.
+        # Linux runs once per package format from the update feed, on both
+        # amd64 (ubuntu-latest) and arm64 (ubuntu-24.04-arm) runners.
         include:
           - os: windows-latest
           - os: macos-26
@@ -31,6 +32,14 @@ jobs:
           - os: ubuntu-latest
             format: appimage
           - os: ubuntu-latest
+            format: snap
+          - os: ubuntu-24.04-arm
+            format: targz
+          - os: ubuntu-24.04-arm
+            format: flatpak
+          - os: ubuntu-24.04-arm
+            format: appimage
+          - os: ubuntu-24.04-arm
             format: snap
     runs-on: ${{ matrix.os }}
     name: smoke (${{ matrix.os }}${{ matrix.format && format(', {0}', matrix.format) || '' }})
