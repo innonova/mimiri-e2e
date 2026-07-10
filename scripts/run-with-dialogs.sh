@@ -76,18 +76,36 @@ unset WAYLAND_DISPLAY
 unset ELECTRON_RUN_AS_NODE
 export GTK_USE_PORTAL="${GTK_USE_PORTAL:-1}"
 
-if [[ "${APP_FORMAT:-}" == "snap" ]]; then
-  # Real-session-bus mode (see header). Reuse portals if a desktop session
-  # already runs them — killing them would break that session, but their
-  # dialogs may then render on the session's display, not the Xvfb one.
-  export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bus}"
-  if gdbus call --session --dest org.freedesktop.DBus \
+session_name_owned() {
+  gdbus call --session --dest org.freedesktop.DBus \
     --object-path /org/freedesktop/DBus \
-    --method org.freedesktop.DBus.GetNameOwner \
-    org.freedesktop.portal.Desktop >/dev/null 2>&1; then
-    echo "[run-with-dialogs] portals already on the session bus; reusing them" >&2
+    --method org.freedesktop.DBus.GetNameOwner "$1" >/dev/null 2>&1
+}
+
+if [[ "${APP_FORMAT:-}" == "snap" ]]; then
+  # Real-session-bus mode (see header). Reuse the portals only if a working
+  # pair (frontend AND gtk backend) already owns the bus — i.e. a real
+  # desktop session, which we must not kill; its dialogs may then render on
+  # the session's display rather than the Xvfb one. A frontend WITHOUT the
+  # gtk backend is a headless leftover: D-Bus activation resurrects
+  # xdg-desktop-portal via the systemd user manager (whose environment has
+  # no DISPLAY, so portal-gtk fails), it survives our EXIT trap because it
+  # is not our child, and reusing it leaves every dialog request hanging.
+  # Stop it and start our own portals bound to the Xvfb display.
+  export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bus}"
+  if session_name_owned org.freedesktop.portal.Desktop &&
+    session_name_owned org.freedesktop.impl.portal.desktop.gtk; then
+    echo "[run-with-dialogs] working portals already on the session bus; reusing them" >&2
     openbox &
   else
+    systemctl --user stop xdg-desktop-portal.service xdg-desktop-portal-gtk.service 2>/dev/null || true
+    systemctl --user reset-failed xdg-desktop-portal.service xdg-desktop-portal-gtk.service 2>/dev/null || true
+    pkill -x xdg-desktop-portal 2>/dev/null || true
+    pkill -x xdg-desktop-portal-gtk 2>/dev/null || true
+    for _ in $(seq 1 50); do
+      session_name_owned org.freedesktop.portal.Desktop || break
+      sleep 0.1
+    done
     start_session_services
   fi
   "$@"
