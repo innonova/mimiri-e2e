@@ -29,7 +29,7 @@ import {
   UPDATE_KEY_NAME,
   verifyBundleSignature,
 } from "../helpers/bundle-crypto";
-import { MAC_SHELL_BASE_VERSION } from "../helpers/mac-squirrel";
+import { SHELL_UPGRADE_BASE_VERSION } from "../helpers/app";
 
 const UPDATE_HOST = "https://update.mimiri.io";
 const ARTIFACTS_DIR = path.resolve("artifacts");
@@ -548,16 +548,25 @@ async function main(): Promise<void> {
     );
   }
 
-  if (process.platform === "darwin" && version !== MAC_SHELL_BASE_VERSION) {
-    // The macOS shell-update e2e test updates between two REAL signed
-    // releases (Squirrel.Mac validates the code signature, so a repacked
-    // fixture won't do): a pinned base version is installed, then updated
-    // to the fetched artifact's zip.
-    const baseName = archiveNameForVersion(MAC_SHELL_BASE_VERSION, format);
+  if (version !== SHELL_UPGRADE_BASE_VERSION) {
+    // Shell-upgrade e2e tests start from a pinned old release and upgrade
+    // to the fetched artifact: the macOS shell-update test (Squirrel.Mac
+    // validates code signatures, so both ends must be real signed builds)
+    // and the external-install tests (a user installs a newer version over
+    // an existing one). Download the base archive for this platform/format,
+    // plus the base Setup.exe on Windows (the website install path).
+    const baseName = archiveNameForVersion(SHELL_UPGRADE_BASE_VERSION, format);
     await download(
       `${UPDATE_HOST}/${encodeURIComponent(baseName)}`,
       path.join(DOWNLOADS_DIR, baseName),
     );
+    if (process.platform === "win32") {
+      const baseSetup = `Mimiri Notes-${SHELL_UPGRADE_BASE_VERSION} Setup.exe`;
+      await download(
+        `${UPDATE_HOST}/${encodeURIComponent(baseSetup)}`,
+        path.join(DOWNLOADS_DIR, baseSetup),
+      );
+    }
   }
 
   fs.writeFileSync(

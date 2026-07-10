@@ -140,17 +140,23 @@ export async function waitForCondition(
 
 /**
  * Installs the app for real via the published Squirrel Setup.exe (silent).
- * Setup auto-launches the app after installing; the caller decides when to
- * kill it. Returns the path of the installed app executable.
+ * Setup auto-launches the app after installing; the auto-launched instance
+ * is killed before returning. Returns the path of the installed app
+ * executable. With `over: true` the existing installation is kept — running
+ * a newer Setup.exe over it is exactly the "user downloads the new version
+ * from the website" upgrade path.
  */
 export async function installSquirrelApp(
   setupExePath: string,
   version: string,
+  opts: { over?: boolean } = {},
 ): Promise<string> {
   const root = squirrelRoot();
   const appExe = path.join(root, `app-${version}`, APP_EXE_NAME);
-  // A leftover install is stale global state — clear it first.
-  uninstallSquirrelApp();
+  if (!opts.over) {
+    // A leftover install is stale global state — clear it first.
+    uninstallSquirrelApp();
+  }
   const setup = spawn(setupExePath, ["--silent"], { stdio: "ignore" });
   await new Promise<void>((resolve, reject) => {
     setup.on("exit", () => resolve());
