@@ -36,6 +36,10 @@ export interface MimiriTestInfo {
    */
   channel: string;
   platform: string;
+  /** Echo of MIMIRI_UPDATE_URL (update-host override, 2.6.9+ seams). */
+  updateUrl?: string;
+  /** Echo of MIMIRI_UPDATE_KEY (test signing key override, 2.6.9+ seams). */
+  updateKey?: string;
 }
 
 /**
@@ -117,10 +121,31 @@ export function loadMeta(version?: string, format?: string): ArtifactMeta {
   return meta;
 }
 
+/** Whether `version` is at least maj.min.pat. */
+function versionAtLeast(
+  version: string,
+  maj: number,
+  min: number,
+  pat: number,
+): boolean {
+  const [vMaj, vMin, vPat] = version.split(".").map(Number);
+  return (
+    vMaj > maj ||
+    (vMaj === maj && (vMin > min || (vMin === min && vPat >= pat)))
+  );
+}
+
 /** Native --user-data-dir support landed in the client in 2.6.6. */
 function supportsUserDataDirFlag(version: string): boolean {
-  const [maj, min, pat] = version.split(".").map(Number);
-  return maj > 2 || (maj === 2 && (min > 6 || (min === 6 && pat >= 6)));
+  return versionAtLeast(version, 2, 6, 6);
+}
+
+/**
+ * The MIMIRI_UPDATE_URL / MIMIRI_UPDATE_KEY seams (update-host and signing
+ * key overrides for update testing) landed in the client in 2.6.9.
+ */
+export function supportsUpdateSeams(version: string): boolean {
+  return versionAtLeast(version, 2, 6, 9);
 }
 
 /**

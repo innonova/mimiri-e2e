@@ -23,6 +23,12 @@ import {
   SNAP_NAME,
   resolveFormat,
 } from "../helpers/format";
+import {
+  Bundle,
+  PRODUCTION_UPDATE_PUBLIC_KEY,
+  UPDATE_KEY_NAME,
+  verifyBundleSignature,
+} from "../helpers/bundle-crypto";
 
 const UPDATE_HOST = "https://update.mimiri.io";
 const ARTIFACTS_DIR = path.resolve("artifacts");
@@ -359,6 +365,69 @@ function installSnap(bundle: string, version: string): void {
   }
 }
 
+/**
+ * Downloads the published bundle JSON for `version` into
+ * `artifacts/<version>/bundle.json` (shared across Linux format subdirs —
+ * the bundle is format-independent). The update e2e test serves this bundle,
+ * version-bumped and re-signed with a test key, from a local mock server.
+ * Verified against the production update key so a corrupt download fails
+ * here rather than as a baffling in-app signature error at test time.
+ *
+ * Bundles are published per bundle version, which can lag the artifact
+ * version (the shell version); on a 404 the channel pointer's version is
+ * fetched instead — any real bundle works, the test rewrites its version.
+ */
+async function fetchBundleJson(
+  version: string,
+  channel: string,
+): Promise<void> {
+  const bundleFile = path.join(ARTIFACTS_DIR, version, "bundle.json");
+  if (fs.existsSync(bundleFile)) {
+    console.log(`[fetch-artifact] using existing bundle.json`);
+    return;
+  }
+  let res = await fetch(`${UPDATE_HOST}/${UPDATE_KEY_NAME}.${version}.json`);
+  if (res.status === 404) {
+    const pointerChannel = channel === "canary" ? "canary" : "stable";
+    const pointer = await fetch(
+      `${UPDATE_HOST}/${UPDATE_KEY_NAME}.${pointerChannel}.json`,
+    );
+    if (!pointer.ok) {
+      throw new Error(
+        `failed to fetch ${pointerChannel} bundle pointer: HTTP ${pointer.status}`,
+      );
+    }
+    const info = (await pointer.json()) as { version: string };
+    console.log(
+      `[fetch-artifact] no bundle for ${version}, falling back to ` +
+        `${pointerChannel} bundle ${info.version}`,
+    );
+    res = await fetch(`${UPDATE_HOST}/${UPDATE_KEY_NAME}.${info.version}.json`);
+  }
+  if (!res.ok) {
+    throw new Error(`failed to fetch bundle json: HTTP ${res.status}`);
+  }
+  const text = await res.text();
+  const bundle = JSON.parse(text) as Bundle;
+  if (
+    !(await verifyBundleSignature(
+      bundle,
+      UPDATE_KEY_NAME,
+      PRODUCTION_UPDATE_PUBLIC_KEY,
+    ))
+  ) {
+    throw new Error(
+      `bundle ${bundle.version} failed signature verification against the ` +
+        `production update key`,
+    );
+  }
+  fs.mkdirSync(path.dirname(bundleFile), { recursive: true });
+  fs.writeFileSync(bundleFile, text);
+  console.log(
+    `[fetch-artifact] bundle.json ${bundle.version} downloaded and verified`,
+  );
+}
+
 /** Whether the version+format is already fully prepared. */
 function alreadyPrepared(
   metaFile: string,
@@ -462,6 +531,10 @@ async function main(): Promise<void> {
     };
     fs.writeFileSync(metaFile, JSON.stringify(meta, null, 2));
   }
+
+  // Runs even for already-prepared artifacts — they may have been fetched
+  // before bundle.json existed.
+  await fetchBundleJson(version, channel);
 
   fs.writeFileSync(
     path.join(ARTIFACTS_DIR, "current.json"),
