@@ -151,3 +151,7 @@ vite.config.ts.timestamp-*
 # Downloaded app builds
 /artifacts/
 Mimiri Notes-darwin-universal-2.6.5/
+connect.sh
+.mcp.json
+.gitignore
+.claude/

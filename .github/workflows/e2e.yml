@@ -12,6 +12,7 @@ on:
     - cron: "0 6 * * *"
   push:
     branches: [main]
+  pull_request:
 
 jobs:
   smoke:
@@ -35,14 +36,21 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
+      - name: Install native dialog stack (Linux)
+        if: runner.os == 'Linux'
+        run: bash scripts/setup-linux-dialogs.sh
+
       - name: Fetch app build
         run: npm run fetch -- ${{ github.event.inputs.channel || 'canary' }}
 
-      - name: Run smoke tests (Linux)
+      - name: Run tests (Linux)
         if: runner.os == 'Linux'
-        run: xvfb-run --auto-servernum npm test
+        # Wraps the run in Xvfb + openbox + a private D-Bus session with
+        # xdg-desktop-portal, so the export/import tests can drive real portal
+        # file dialogs. The smoke tests run unchanged under it.
+        run: bash scripts/run-with-dialogs.sh npm test
 
-      - name: Run smoke tests (Windows, macOS)
+      - name: Run tests (Windows, macOS)
         if: runner.os != 'Linux'
         run: npm test
 

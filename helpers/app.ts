@@ -94,7 +94,12 @@ function supportsUserDataDirFlag(version: string): boolean {
  * connect to the Chromium side of the app.
  */
 export async function launchApp(
-  opts: { version?: string; userDataDir?: string } = {},
+  opts: {
+    version?: string;
+    userDataDir?: string;
+    /** Extra environment for the app process (e.g. GTK_USE_PORTAL). */
+    env?: Record<string, string>;
+  } = {},
 ): Promise<AppContext> {
   const meta = loadMeta(opts.version);
   const executablePath = path.resolve(meta.executablePath);
@@ -119,7 +124,7 @@ export async function launchApp(
     executablePath,
     ["--remote-debugging-port=0", `--user-data-dir=${userDataDir}`],
     {
-      env: { ...process.env, ...isolationEnv, APP_TEST_MODE: "1" },
+      env: { ...process.env, ...isolationEnv, ...opts.env, APP_TEST_MODE: "1" },
       stdio: ["ignore", "pipe", "pipe"],
     },
   );

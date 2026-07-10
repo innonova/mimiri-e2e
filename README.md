@@ -30,3 +30,47 @@ variable if multiple versions are fetched.
 
 Each test run launches the app with an isolated temporary user data
 directory, which is deleted again when the run finishes.
+
+## Native file-dialog tests (Linux, macOS)
+
+`tests/export-import.spec.ts` exercises the app's export/import features
+through **real native file dialogs**. Because the suite attaches to the
+published binary over CDP, Electron's `dialog` module cannot be stubbed, so
+the dialogs are driven for real (`helpers/native-dialog.ts` dispatches to a
+per-platform driver):
+
+- **Linux** — the app is launched with `GTK_USE_PORTAL=1`, which routes its
+  GTK file choosers over D-Bus to `xdg-desktop-portal`; the dialog is
+  rendered by `xdg-desktop-portal-gtk` in a separate process and driven with
+  `xdotool`. Needs an X server, a window manager and the portal stack; on a
+  headless machine, provision once and run under the wrapper:
+
+  ```sh
+  bash scripts/setup-linux-dialogs.sh          # one-time: apt packages + portal config
+  bash scripts/run-with-dialogs.sh npm test    # Xvfb + openbox + portals, then the tests
+  ```
+
+- **macOS** — the NSOpenPanel sheet is driven through System Events
+  (Cmd+Shift+G → path → confirm), and the app's native menu bar is used to
+  trigger export/import. The process running the tests needs the
+  **Automation (System Events)** and **Accessibility** permissions; over SSH
+  that means granting them to `sshd-keygen-wrapper` in System Settings →
+  Privacy & Security (macOS prompts on first use).
+
+- **Windows** — the IFileDialog folder picker is an owned window nested under
+  the app's main window; it is located via UI Automation
+  (`NativeWindowHandle`) and driven with SendKeys (type path → Enter). This
+  needs an interactive desktop session. On a normal desktop login (or a CI
+  runner that provides one) run the tests directly. Over SSH you land in the
+  non-interactive session 0 with no desktop, so delegate to the logged-in
+  console session:
+
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File scripts\run-in-console.ps1 "npx.cmd playwright test"
+  ```
+
+The spec skips itself wherever these prerequisites are missing, so plain
+`npm test` stays green everywhere else. In CI the dialog tests run on all
+three platforms: the Linux job wraps the suite in
+`scripts/run-with-dialogs.sh`, and the GitHub macOS and Windows runners both
+provide interactive sessions that allow the automation.
