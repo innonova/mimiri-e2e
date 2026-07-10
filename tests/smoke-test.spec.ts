@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { spawnSync } from "child_process";
+import fs from "fs";
 import { launchApp, cleanup, getTestInfo, AppContext } from "../helpers/app";
 import { FLATPAK_APP_ID } from "../helpers/format";
 
@@ -60,5 +61,13 @@ test.describe("smoke test", () => {
     });
     expect(ps.status).toBe(0);
     expect(ps.stdout).toContain(FLATPAK_APP_ID);
+  });
+
+  test("app runs from the snap mount", async () => {
+    test.skip(ctx.format !== "snap", "only meaningful for snap");
+    // `snap run` exec()s into the confined app, so the spawned pid IS the
+    // app process; its executable must live under the snap mount.
+    const exe = fs.readlinkSync(`/proc/${ctx.process.pid}/exe`);
+    expect(exe).toContain("/snap/");
   });
 });

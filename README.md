@@ -18,7 +18,7 @@ npm run fetch:canary         # latest canary
 npm run fetch -- 2.6.1       # explicit version
 
 # Linux only: pick a specific package format from the update feed
-npm run fetch -- canary --format=flatpak    # targz (default) | flatpak | appimage
+npm run fetch -- canary --format=flatpak    # targz (default) | flatpak | appimage | snap
 
 # run the tests against the fetched build
 npm test
@@ -34,8 +34,8 @@ artifacts are fetched.
 
 ## Linux package formats
 
-The update feed ships Linux builds as tar.gz, flatpak, AppImage and snap.
-The suite can test the first three (snap not implemented yet):
+The update feed ships Linux builds as tar.gz, flatpak, AppImage and snap;
+the suite can test all four:
 
 - **targz** — extracted under `artifacts/<version>/targz/` and executed in
   place. The default everywhere.
@@ -52,9 +52,21 @@ The suite can test the first three (snap not implemented yet):
 - **appimage** — the `.AppImage` file is made executable and run directly,
   which requires FUSE (`libfuse2`/`libfuse2t64`;
   `scripts/setup-linux-dialogs.sh appimage` installs it).
+- **snap** — installed system-wide with `sudo snap install --dangerous`
+  (local file, no store assertions; the standard desktop interfaces still
+  auto-connect) and launched with `snap run`. Strict confinement means a
+  private `/tmp` and no dotfile access in `$HOME`, so the temp user-data
+  dir is created as a non-hidden directory under `$HOME` instead. The
+  export/import target dirs can stay in `/tmp` — the app only reaches them
+  through the document portal, same as flatpak. Unlike the other formats,
+  the dialog tests run on the **real** user session bus rather than a
+  private one (`run-with-dialogs.sh` switches automatically): a confined
+  snap cannot reach a private bus socket, and `snap run` needs the user
+  systemd on the bus to create its tracking scope.
 
 In CI the Linux job runs once per format (see the matrix in
-`.github/workflows/e2e.yml`).
+`.github/workflows/e2e.yml`); the snap job is `continue-on-error` until it
+has proven itself stable.
 
 Each test run launches the app with an isolated temporary user data
 directory, which is deleted again when the run finishes.

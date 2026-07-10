@@ -7,6 +7,7 @@ import {
   AppFormat,
   ArtifactMeta,
   FLATPAK_APP_ID,
+  SNAP_NAME,
   resolveFormat,
 } from "./format";
 
@@ -20,7 +21,7 @@ export interface AppContext {
   version: string;
   /** Channel the artifact was fetched from: stable | canary | explicit. */
   channel: string;
-  /** Package format under test: targz | flatpak | appimage. */
+  /** Package format under test: targz | flatpak | appimage | snap. */
   format: AppFormat;
 }
 
@@ -142,8 +143,16 @@ export async function launchApp(
 ): Promise<AppContext> {
   const meta = loadMeta(opts.version, opts.format);
   const format = meta.format ?? "targz";
+  // Fresh temp dir by default. Strict snap confinement has a private /tmp
+  // and the home interface excludes dotfiles, so for snap the dir must be a
+  // non-hidden path under $HOME.
   const userDataDir =
-    opts.userDataDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "mimiri-e2e-")); // fresh by default
+    opts.userDataDir ??
+    fs.mkdtempSync(
+      format === "snap"
+        ? path.join(os.homedir(), "mimiri-e2e-")
+        : path.join(os.tmpdir(), "mimiri-e2e-"),
+    );
 
   // The app honors `--user-data-dir` natively since 2.6.6 (applied via
   // app.setPath in main.ts). For older builds, fall back to redirecting
@@ -187,6 +196,13 @@ export async function launchApp(
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
+  } else if (format === "snap") {
+    // `snap run` passes the caller's environment through to the confined
+    // app, so a plain env merge works (unlike flatpak).
+    child = spawn("snap", ["run", meta.snapName ?? SNAP_NAME, ...appArgs], {
+      env: { ...process.env, ...appEnv },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
   } else {
     if (!meta.executablePath) {
       throw new Error(

@@ -9,8 +9,9 @@
 #   flatpak  — flatpak + the flathub remote (runtime dependency resolution)
 #   appimage — libfuse2 (AppImages mount themselves via FUSE; running the
 #              file directly keeps the $APPIMAGE runtime environment authentic)
+#   snap     — nothing extra (snapd ships with Ubuntu, incl. GitHub runners)
 #
-# Usage: bash scripts/setup-linux-dialogs.sh [targz|flatpak|appimage]
+# Usage: bash scripts/setup-linux-dialogs.sh [targz|flatpak|appimage|snap]
 set -euo pipefail
 
 FORMAT="${1:-targz}"
@@ -21,7 +22,7 @@ sudo apt-get install -y --no-install-recommends \
   xdg-desktop-portal xdg-desktop-portal-gtk
 
 case "$FORMAT" in
-  targz) ;;
+  targz | snap) ;;
   flatpak)
     sudo apt-get install -y --no-install-recommends flatpak
     flatpak remote-add --user --if-not-exists flathub \
@@ -33,7 +34,7 @@ case "$FORMAT" in
       sudo apt-get install -y --no-install-recommends libfuse2
     ;;
   *)
-    echo "unknown format: $FORMAT (expected targz, flatpak or appimage)" >&2
+    echo "unknown format: $FORMAT (expected targz, flatpak, appimage or snap)" >&2
     exit 1
     ;;
 esac

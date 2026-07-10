@@ -20,6 +20,7 @@ import {
   AppFormat,
   ArtifactMeta,
   FLATPAK_APP_ID,
+  SNAP_NAME,
   resolveFormat,
 } from "../helpers/format";
 
@@ -59,6 +60,8 @@ function archiveNameForVersion(version: string, format: AppFormat): string {
           return `mimiri-notes_${version}_${linuxArch()}.AppImage`;
         case "flatpak":
           return `${FLATPAK_APP_ID}_${version}_${linuxArch()}.flatpak`;
+        case "snap":
+          return `${SNAP_NAME}_${version}_${linuxArch()}.snap`;
         default:
           throw new Error(`unsupported format: ${format}`);
       }
@@ -112,6 +115,8 @@ function executableRelPath(
           );
         case "flatpak":
           return undefined; // installed into the user flatpak installation
+        case "snap":
+          return undefined; // installed system-wide by snapd
         default:
           throw new Error(`unsupported format: ${format}`);
       }
@@ -145,6 +150,8 @@ function linuxFeedSuffix(format: AppFormat): string {
       return `_${linuxArch()}.AppImage`;
     case "flatpak":
       return `_${linuxArch()}.flatpak`;
+    case "snap":
+      return `_${linuxArch()}.snap`;
     default:
       throw new Error(`unsupported format: ${format}`);
   }
@@ -316,11 +323,48 @@ function installFlatpak(bundle: string): string {
   return commit;
 }
 
+/**
+ * Version reported by snapd for the installed snap, or undefined. Unlike
+ * flatpak's metainfo-derived version, this comes from snapcraft.yaml and
+ * matches the app version.
+ */
+function installedSnapVersion(): string | undefined {
+  const result = spawnSync("snap", ["list", SNAP_NAME], { encoding: "utf8" });
+  if (result.status !== 0) {
+    return undefined;
+  }
+  // Output: header line, then "Name  Version  Rev  ..."
+  return result.stdout.split("\n")[1]?.split(/\s+/)[1];
+}
+
+function installSnap(bundle: string, version: string): void {
+  // --dangerous: local file without store assertions. Auto-connectable
+  // interfaces (home, x11, desktop, network, ...) still connect.
+  console.log(`[fetch-artifact] sudo snap install --dangerous ${bundle}`);
+  const result = spawnSync("sudo", ["snap", "install", "--dangerous", bundle], {
+    stdio: "inherit",
+  });
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    throw new Error(`snap install exited with status ${result.status}`);
+  }
+  const installed = installedSnapVersion();
+  if (installed !== version) {
+    throw new Error(
+      `snap install verification failed: expected version ${version}, ` +
+        `snap list reports ${installed ?? "not installed"}`,
+    );
+  }
+}
+
 /** Whether the version+format is already fully prepared. */
 function alreadyPrepared(
   metaFile: string,
   executable: string | undefined,
   format: AppFormat,
+  version: string,
 ): boolean {
   if (!fs.existsSync(metaFile)) {
     return false;
@@ -333,6 +377,10 @@ function alreadyPrepared(
       meta.flatpakCommit !== undefined &&
       meta.flatpakCommit === installedFlatpakCommit()
     );
+  }
+  if (format === "snap") {
+    // Same reasoning: snapd holds the actual install.
+    return installedSnapVersion() === version;
   }
   return executable !== undefined && fs.existsSync(executable);
 }
@@ -367,7 +415,7 @@ async function main(): Promise<void> {
   const metaFile = path.join(targetDir, "meta.json");
   const executable = executableRelPath(version, format);
 
-  if (alreadyPrepared(metaFile, executable, format)) {
+  if (alreadyPrepared(metaFile, executable, format, version)) {
     console.log(
       `[fetch-artifact] ${version} (${format}) already prepared, skipping`,
     );
@@ -381,6 +429,10 @@ async function main(): Promise<void> {
     let flatpakCommit: string | undefined;
     if (format === "flatpak") {
       flatpakCommit = installFlatpak(archive);
+      fs.rmSync(targetDir, { recursive: true, force: true });
+      fs.mkdirSync(targetDir, { recursive: true });
+    } else if (format === "snap") {
+      installSnap(archive, version);
       fs.rmSync(targetDir, { recursive: true, force: true });
       fs.mkdirSync(targetDir, { recursive: true });
     } else if (format === "appimage") {
@@ -406,6 +458,7 @@ async function main(): Promise<void> {
       ...(format === "flatpak"
         ? { flatpakAppId: FLATPAK_APP_ID, flatpakCommit }
         : {}),
+      ...(format === "snap" ? { snapName: SNAP_NAME } : {}),
     };
     fs.writeFileSync(metaFile, JSON.stringify(meta, null, 2));
   }

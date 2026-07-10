@@ -1,12 +1,11 @@
 /**
  * The Linux package format under test. On Windows/macOS there is only one
  * packaged form, which is treated as "targz" (the platform default).
- *
- * "snap" is reserved for later — fetching/launching it is not implemented.
  */
 export type AppFormat = "targz" | "flatpak" | "appimage" | "snap";
 
 export const FLATPAK_APP_ID = "io.mimiri.notes";
+export const SNAP_NAME = "mimiri-notes";
 
 export interface ArtifactMeta {
   version: string;
@@ -24,6 +23,8 @@ export interface ArtifactMeta {
    * (the version flatpak reports comes from stale AppStream metainfo).
    */
   flatpakCommit?: string;
+  /** Snap package name, set when format is "snap". */
+  snapName?: string;
 }
 
 const FORMATS: AppFormat[] = ["targz", "flatpak", "appimage", "snap"];
@@ -41,9 +42,6 @@ export function resolveFormat(explicit?: string): AppFormat {
     );
   }
   const format = raw as AppFormat;
-  if (format === "snap") {
-    throw new Error("format snap is not implemented yet");
-  }
   if (format !== "targz" && process.platform !== "linux") {
     throw new Error(
       `format ${format} is only available on Linux (platform: ${process.platform})`,
