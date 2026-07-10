@@ -9,7 +9,7 @@ import {
   supportsUpdateSeams,
   AppContext,
 } from "../helpers/app";
-import { enterLocalMode } from "../helpers/ui";
+import { enterLocalMode, openCheckForUpdates } from "../helpers/ui";
 import { startUpdateServer, TestUpdateServer } from "../helpers/update-server";
 
 /**
@@ -21,13 +21,12 @@ import { startUpdateServer, TestUpdateServer } from "../helpers/update-server";
  * the real Settings → Updates UI: check → download (signature verify,
  * install) → activate (window reload) → the app runs the new bundle.
  *
- * Runs on Linux (targz) and Windows. macOS needs native-menu navigation and
- * the other Linux formats are follow-up work (flatpak/snap store update
- * flows are out of scope by design).
+ * Runs on Linux (targz), Windows and macOS. The other Linux formats are
+ * follow-up work (flatpak/snap store update flows are out of scope by
+ * design).
  */
 
-/** macOS is excluded for now: its menu bar is native (System Events). */
-const SUPPORTED_PLATFORMS: string[] = ["linux", "win32"];
+const SUPPORTED_PLATFORMS: string[] = ["linux", "win32", "darwin"];
 
 test.describe("bundle update", () => {
   let ctx: AppContext | undefined;
@@ -66,7 +65,7 @@ test.describe("bundle update", () => {
   test("app updates to a served bundle through the UI", async () => {
     test.skip(
       !SUPPORTED_PLATFORMS.includes(process.platform),
-      "bundle-update test runs on Linux and Windows for now (macOS needs native-menu navigation)",
+      "bundle-update test runs on Linux, Windows and macOS",
     );
     const meta = loadMeta();
     test.skip(
@@ -92,10 +91,7 @@ test.describe("bundle update", () => {
       await enterLocalMode(page);
       // Help → "Check for updates" opens the settings-update page (and runs
       // a check against the still-disarmed mock, which offers nothing).
-      await page.getByTestId("title-menu-help").click();
-      const item = page.getByTestId("menu-check-for-update");
-      await expect(item).toBeVisible();
-      await item.click();
+      await openCheckForUpdates(ctx!);
       await expect(page.getByTestId("update-mode-select")).toBeVisible();
       await expect(page.getByTestId("update-available")).not.toBeVisible();
     });
@@ -147,8 +143,7 @@ test.describe("bundle update", () => {
         .getByTestId("update-restart-button")
         .click({ noWaitAfter: true });
       await enterLocalMode(page);
-      await page.getByTestId("title-menu-help").click();
-      await page.getByTestId("menu-check-for-update").click();
+      await openCheckForUpdates(ctx!);
       await expect(page.getByTestId("update-current-version")).toHaveText(
         server!.bundleVersion,
         { timeout: 15_000 },

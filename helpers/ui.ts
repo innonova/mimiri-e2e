@@ -63,6 +63,25 @@ export async function clickFileMenuItem(
   await item.click();
 }
 
+/**
+ * Opens Help → "Check for updates", which opens the update settings page
+ * and runs an update check. On Linux/Windows the menu is the DOM titlebar;
+ * on macOS it is the native menu bar, driven through System Events.
+ */
+export async function openCheckForUpdates(ctx: AppContext): Promise<void> {
+  if (process.platform === "darwin") {
+    if (ctx.process.pid === undefined) {
+      throw new Error("app process has no pid");
+    }
+    clickNativeMenuItem(ctx.process.pid, "Help", "Check for updates");
+    return;
+  }
+  await ctx.page.getByTestId("title-menu-help").click();
+  const item = ctx.page.getByTestId("menu-check-for-update");
+  await expect(item).toBeVisible();
+  await item.click();
+}
+
 /** Creates a root note via the File menu, optionally typing body content. */
 export async function createRootNote(
   ctx: AppContext,
