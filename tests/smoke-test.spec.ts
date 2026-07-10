@@ -1,5 +1,8 @@
 import { test, expect } from "@playwright/test";
+import { spawnSync } from "child_process";
+import fs from "fs";
 import { launchApp, cleanup, getTestInfo, AppContext } from "../helpers/app";
+import { FLATPAK_APP_ID } from "../helpers/format";
 
 test.describe("smoke test", () => {
   let ctx: AppContext;
@@ -45,5 +48,26 @@ test.describe("smoke test", () => {
 
   test("app process is still alive", async () => {
     expect(ctx.process.exitCode).toBeNull();
+  });
+
+  // The package format is not observable from inside the app (mimiriTestInfo
+  // carries no format field and main-process eval is fused off in published
+  // builds), so assert from the host side: flatpak knows which sandboxes it
+  // is running.
+  test("app runs inside the flatpak sandbox", async () => {
+    test.skip(ctx.format !== "flatpak", "only meaningful for flatpak");
+    const ps = spawnSync("flatpak", ["ps", "--columns=application"], {
+      encoding: "utf8",
+    });
+    expect(ps.status).toBe(0);
+    expect(ps.stdout).toContain(FLATPAK_APP_ID);
+  });
+
+  test("app runs from the snap mount", async () => {
+    test.skip(ctx.format !== "snap", "only meaningful for snap");
+    // `snap run` exec()s into the confined app, so the spawned pid IS the
+    // app process; its executable must live under the snap mount.
+    const exe = fs.readlinkSync(`/proc/${ctx.process.pid}/exe`);
+    expect(exe).toContain("/snap/");
   });
 });

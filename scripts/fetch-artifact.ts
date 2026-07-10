@@ -3,17 +3,26 @@
  * `artifacts/<version>` so the e2e suite has something to launch.
  *
  * Usage:
- *   npm run fetch                  # latest stable
- *   npm run fetch -- canary        # latest canary
- *   npm run fetch -- 2.6.1         # explicit version
+ *   npm run fetch                            # latest stable
+ *   npm run fetch -- canary                  # latest canary
+ *   npm run fetch -- 2.6.1                   # explicit version
+ *   npm run fetch -- canary --format=flatpak # a specific Linux package format
  *
- * Supported platforms: Windows (.nupkg) and Linux (.tar.gz).
+ * Supported platforms: Windows (.nupkg), macOS (.zip) and Linux
+ * (tar.gz, flatpak, AppImage — selected with --format, default targz).
  */
 import path from "path";
 import fs from "fs";
 import { spawnSync } from "child_process";
 import { pipeline } from "stream/promises";
 import { Readable } from "stream";
+import {
+  AppFormat,
+  ArtifactMeta,
+  FLATPAK_APP_ID,
+  SNAP_NAME,
+  resolveFormat,
+} from "../helpers/format";
 
 const UPDATE_HOST = "https://update.mimiri.io";
 const ARTIFACTS_DIR = path.resolve("artifacts");
@@ -35,24 +44,27 @@ interface Feed {
   systems: FeedSystem[];
 }
 
-export interface ArtifactMeta {
-  version: string;
-  channel: string;
-  platform: NodeJS.Platform;
-  /** Path of the app executable, relative to the repo root. */
-  executablePath: string;
-}
-
 function linuxArch(): string {
   return process.arch === "arm64" ? "arm64" : "amd64";
 }
 
-function archiveNameForVersion(version: string): string {
+function archiveNameForVersion(version: string, format: AppFormat): string {
   switch (process.platform) {
     case "win32":
       return `mimiri_notes-${version}-full.nupkg`;
     case "linux":
-      return `mimiri-notes_${version}_${linuxArch()}.tar.gz`;
+      switch (format) {
+        case "targz":
+          return `mimiri-notes_${version}_${linuxArch()}.tar.gz`;
+        case "appimage":
+          return `mimiri-notes_${version}_${linuxArch()}.AppImage`;
+        case "flatpak":
+          return `${FLATPAK_APP_ID}_${version}_${linuxArch()}.flatpak`;
+        case "snap":
+          return `${SNAP_NAME}_${version}_${linuxArch()}.snap`;
+        default:
+          throw new Error(`unsupported format: ${format}`);
+      }
     case "darwin":
       return `Mimiri Notes-darwin-universal-${version}.zip`;
     default:
@@ -60,7 +72,21 @@ function archiveNameForVersion(version: string): string {
   }
 }
 
-function executableRelPath(version: string): string {
+/**
+ * Directory a version+format is prepared in. Linux uses a per-format subdir
+ * so fetching one format doesn't wipe a sibling; other platforms keep the
+ * original `artifacts/<version>` layout.
+ */
+function targetDirFor(version: string, format: AppFormat): string {
+  return process.platform === "linux"
+    ? path.join(ARTIFACTS_DIR, version, format)
+    : path.join(ARTIFACTS_DIR, version);
+}
+
+function executableRelPath(
+  version: string,
+  format: AppFormat,
+): string | undefined {
   switch (process.platform) {
     case "win32":
       return path.join(
@@ -71,7 +97,29 @@ function executableRelPath(version: string): string {
         "Mimiri Notes.exe",
       );
     case "linux":
-      return path.join("artifacts", version, "mimiri-notes", "mimiri-notes");
+      switch (format) {
+        case "targz":
+          return path.join(
+            "artifacts",
+            version,
+            "targz",
+            "mimiri-notes",
+            "mimiri-notes",
+          );
+        case "appimage":
+          return path.join(
+            "artifacts",
+            version,
+            "appimage",
+            archiveNameForVersion(version, format),
+          );
+        case "flatpak":
+          return undefined; // installed into the user flatpak installation
+        case "snap":
+          return undefined; // installed system-wide by snapd
+        default:
+          throw new Error(`unsupported format: ${format}`);
+      }
     case "darwin":
       return path.join(
         "artifacts",
@@ -94,8 +142,24 @@ function parseVersion(fileName: string): string {
   return match[1];
 }
 
+function linuxFeedSuffix(format: AppFormat): string {
+  switch (format) {
+    case "targz":
+      return `_${linuxArch()}.tar.gz`;
+    case "appimage":
+      return `_${linuxArch()}.AppImage`;
+    case "flatpak":
+      return `_${linuxArch()}.flatpak`;
+    case "snap":
+      return `_${linuxArch()}.snap`;
+    default:
+      throw new Error(`unsupported format: ${format}`);
+  }
+}
+
 async function resolveFromFeed(
   channel: "stable" | "canary",
+  format: AppFormat,
 ): Promise<{ url: string; version: string }> {
   const feedUrl = `${UPDATE_HOST}/latest.json`;
   console.log(`[fetch-artifact] resolving ${channel} from ${feedUrl}`);
@@ -124,10 +188,12 @@ async function resolveFromFeed(
         ? links.find(
             (l) => l.name.includes("darwin") && l.name.endsWith(".zip"),
           )
-        : links.find((l) => l.name.endsWith(`_${linuxArch()}.tar.gz`));
+        : links.find((l) => l.name.endsWith(linuxFeedSuffix(format)));
   if (!link) {
     throw new Error(
-      `no matching ${channel} artifact for ${systemName}/${process.arch} in update feed`,
+      `no matching ${channel} artifact for ${systemName}/${process.arch}${
+        process.platform === "linux" ? `/${format}` : ""
+      } in update feed`,
     );
   }
   return { url: link.url, version: parseVersion(link.name) };
@@ -200,38 +266,185 @@ function extract(archive: string, targetDir: string): void {
   }
 }
 
+function runFlatpak(args: string[]): void {
+  console.log(`[fetch-artifact] flatpak ${args.join(" ")}`);
+  const result = spawnSync("flatpak", args, { stdio: "inherit" });
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    throw new Error(`flatpak ${args[0]} exited with status ${result.status}`);
+  }
+}
+
+/**
+ * Ostree commit of the installed app, or undefined. Note: the *version*
+ * flatpak info reports comes from the bundle's AppStream metainfo, whose
+ * release history lags the actual app version, so the commit is the only
+ * reliable way to tie an installation to a downloaded bundle. The app
+ * version itself is asserted at test time via the user agent.
+ */
+function installedFlatpakCommit(): string | undefined {
+  const result = spawnSync(
+    "flatpak",
+    ["info", "--user", "-c", FLATPAK_APP_ID],
+    { encoding: "utf8" },
+  );
+  if (result.status !== 0) {
+    return undefined;
+  }
+  return result.stdout.trim() || undefined;
+}
+
+/** Installs the bundle and returns the installed ostree commit. */
+function installFlatpak(bundle: string): string {
+  // The bundle records flathub as its runtime repo; make sure the remote
+  // exists so the runtime dependency can be resolved.
+  runFlatpak([
+    "remote-add",
+    "--user",
+    "--if-not-exists",
+    "flathub",
+    "https://dl.flathub.org/repo/flathub.flatpakrepo",
+  ]);
+  // Only one version of the app can be installed at a time, and installing
+  // a bundle whose commit is already present fails even with --reinstall
+  // (flatpak 1.14) — uninstall any existing copy first.
+  spawnSync("flatpak", ["uninstall", "--user", "-y", FLATPAK_APP_ID], {
+    stdio: "ignore",
+  });
+  runFlatpak(["install", "--user", "-y", bundle]);
+  const commit = installedFlatpakCommit();
+  if (!commit) {
+    throw new Error(
+      `flatpak install verification failed: ${FLATPAK_APP_ID} is not installed`,
+    );
+  }
+  return commit;
+}
+
+/**
+ * Version reported by snapd for the installed snap, or undefined. Unlike
+ * flatpak's metainfo-derived version, this comes from snapcraft.yaml and
+ * matches the app version.
+ */
+function installedSnapVersion(): string | undefined {
+  const result = spawnSync("snap", ["list", SNAP_NAME], { encoding: "utf8" });
+  if (result.status !== 0) {
+    return undefined;
+  }
+  // Output: header line, then "Name  Version  Rev  ..."
+  return result.stdout.split("\n")[1]?.split(/\s+/)[1];
+}
+
+function installSnap(bundle: string, version: string): void {
+  // --dangerous: local file without store assertions. Auto-connectable
+  // interfaces (home, x11, desktop, network, ...) still connect.
+  console.log(`[fetch-artifact] sudo snap install --dangerous ${bundle}`);
+  const result = spawnSync("sudo", ["snap", "install", "--dangerous", bundle], {
+    stdio: "inherit",
+  });
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    throw new Error(`snap install exited with status ${result.status}`);
+  }
+  const installed = installedSnapVersion();
+  if (installed !== version) {
+    throw new Error(
+      `snap install verification failed: expected version ${version}, ` +
+        `snap list reports ${installed ?? "not installed"}`,
+    );
+  }
+}
+
+/** Whether the version+format is already fully prepared. */
+function alreadyPrepared(
+  metaFile: string,
+  executable: string | undefined,
+  format: AppFormat,
+  version: string,
+): boolean {
+  if (!fs.existsSync(metaFile)) {
+    return false;
+  }
+  if (format === "flatpak") {
+    // The flatpak installation is global mutable state — meta.json alone
+    // doesn't prove this bundle is still the one installed.
+    const meta = JSON.parse(fs.readFileSync(metaFile, "utf8")) as ArtifactMeta;
+    return (
+      meta.flatpakCommit !== undefined &&
+      meta.flatpakCommit === installedFlatpakCommit()
+    );
+  }
+  if (format === "snap") {
+    // Same reasoning: snapd holds the actual install.
+    return installedSnapVersion() === version;
+  }
+  return executable !== undefined && fs.existsSync(executable);
+}
+
 async function main(): Promise<void> {
-  const arg = process.argv[2] ?? "stable";
+  const args = process.argv.slice(2);
+  const formatArg = args
+    .find((a) => a.startsWith("--format="))
+    ?.slice("--format=".length);
+  const positional = args.filter((a) => !a.startsWith("--"));
+  const arg = positional[0] ?? "stable";
+  const format = resolveFormat(formatArg);
 
   let version: string;
   let url: string;
   let channel: string;
   if (arg === "stable" || arg === "canary") {
     channel = arg;
-    ({ url, version } = await resolveFromFeed(arg));
+    ({ url, version } = await resolveFromFeed(arg, format));
   } else if (/^\d+\.\d+\.\d+$/.test(arg)) {
     channel = "explicit";
     version = arg;
-    url = `${UPDATE_HOST}/${encodeURIComponent(archiveNameForVersion(version))}`;
+    url = `${UPDATE_HOST}/${encodeURIComponent(archiveNameForVersion(version, format))}`;
   } else {
     throw new Error(
       `invalid argument "${arg}" — expected "stable", "canary" or a version like 2.6.1`,
     );
   }
-  console.log(`[fetch-artifact] version ${version} (${channel})`);
+  console.log(`[fetch-artifact] version ${version} (${channel}, ${format})`);
 
-  const targetDir = path.join(ARTIFACTS_DIR, version);
+  const targetDir = targetDirFor(version, format);
   const metaFile = path.join(targetDir, "meta.json");
-  const executable = executableRelPath(version);
+  const executable = executableRelPath(version, format);
 
-  if (fs.existsSync(metaFile) && fs.existsSync(executable)) {
-    console.log(`[fetch-artifact] ${version} already prepared, skipping`);
+  if (alreadyPrepared(metaFile, executable, format, version)) {
+    console.log(
+      `[fetch-artifact] ${version} (${format}) already prepared, skipping`,
+    );
   } else {
-    const archive = path.join(DOWNLOADS_DIR, archiveNameForVersion(version));
+    const archive = path.join(
+      DOWNLOADS_DIR,
+      archiveNameForVersion(version, format),
+    );
     await download(url, archive);
-    extract(archive, targetDir);
 
-    if (!fs.existsSync(executable)) {
+    let flatpakCommit: string | undefined;
+    if (format === "flatpak") {
+      flatpakCommit = installFlatpak(archive);
+      fs.rmSync(targetDir, { recursive: true, force: true });
+      fs.mkdirSync(targetDir, { recursive: true });
+    } else if (format === "snap") {
+      installSnap(archive, version);
+      fs.rmSync(targetDir, { recursive: true, force: true });
+      fs.mkdirSync(targetDir, { recursive: true });
+    } else if (format === "appimage") {
+      fs.rmSync(targetDir, { recursive: true, force: true });
+      fs.mkdirSync(targetDir, { recursive: true });
+      fs.copyFileSync(archive, executable!);
+      fs.chmodSync(executable!, 0o755);
+    } else {
+      extract(archive, targetDir);
+    }
+
+    if (executable !== undefined && !fs.existsSync(executable)) {
       throw new Error(
         `expected executable not found after extraction: ${executable}`,
       );
@@ -240,16 +453,23 @@ async function main(): Promise<void> {
       version,
       channel,
       platform: process.platform,
-      executablePath: executable,
+      format,
+      ...(executable !== undefined ? { executablePath: executable } : {}),
+      ...(format === "flatpak"
+        ? { flatpakAppId: FLATPAK_APP_ID, flatpakCommit }
+        : {}),
+      ...(format === "snap" ? { snapName: SNAP_NAME } : {}),
     };
     fs.writeFileSync(metaFile, JSON.stringify(meta, null, 2));
   }
 
   fs.writeFileSync(
     path.join(ARTIFACTS_DIR, "current.json"),
-    JSON.stringify({ version }, null, 2),
+    JSON.stringify({ version, format }, null, 2),
   );
-  console.log(`[fetch-artifact] done — current version is ${version}`);
+  console.log(
+    `[fetch-artifact] done — current version is ${version} (${format})`,
+  );
 }
 
 main().catch((err) => {

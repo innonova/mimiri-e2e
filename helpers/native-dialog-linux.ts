@@ -155,7 +155,10 @@ export async function acceptBookmarkedDirectory(
 ): Promise<void> {
   const { x, y, width, height } = dialog.geometry;
   xdo("windowactivate", "--sync", dialog.windowId);
-  // Click the sole user bookmark in the sidebar.
+  // Click the sole user bookmark in the sidebar. The portal-rendered and
+  // in-process GTK choosers are laid out identically (Recent, Home,
+  // Desktop, current-folder shortcut, then the one bookmark), so the same
+  // offset works for both.
   click(x + 70, y + 162);
   await sleep(800);
   // Click Select (bottom-right) to choose the now-current folder.
