@@ -58,6 +58,18 @@ export const TEST_BUNDLE_VERSION = "99.0.0";
 /** Version the disarmed channel pointer offers — older than any release. */
 const DISARMED_VERSION = "0.0.1";
 
+const TEXT_EXTENSIONS = [".js", ".css", ".html", ".json", ".webmanifest"];
+
+function isTextFile(name: string): boolean {
+  return TEXT_EXTENSIONS.some((ext) => name.endsWith(ext));
+}
+
+/** A distinct same-length stand-in for a content hash in an asset name. */
+function mutateHash(hash: string): string {
+  const reversed = [...hash].reverse().join("");
+  return reversed === hash ? ("e2e" + hash).slice(0, hash.length) : reversed;
+}
+
 /**
  * Rewrites every quoted occurrence of the original version string inside the
  * bundle's .js files (file contents are gzip+base64). This changes the
@@ -65,23 +77,70 @@ const DISARMED_VERSION = "0.0.1";
  * after activation the app observably reports the new version. The stamped
  * constant appears as a template literal (`2.6.4`) in the built output;
  * the other quote forms are covered for future-proofing.
+ *
+ * Every modified .js asset is also RENAMED (its content hash mutated) and
+ * all references to it rewritten, mimicking what a real build does — Vite
+ * content-hashes asset names. Without this, the bundle would change file
+ * contents behind unchanged app:// URLs, and Chromium's HTTP cache happily
+ * serves the stale subresource after the activation reload (observed on
+ * Windows), something no real update ever triggers.
  */
-function rewriteVersion(files: BundleFile[], from: string, to: string): void {
-  for (const file of files) {
-    if (file.files) {
-      rewriteVersion(file.files, from, to);
-    } else if (file.name.endsWith(".js") && file.content) {
-      const text = gunzipSync(Buffer.from(file.content, "base64")).toString(
-        "utf8",
-      );
-      let replaced = text;
-      for (const quote of ['"', "'", "`"]) {
-        replaced = replaced
-          .split(`${quote}${from}${quote}`)
-          .join(`${quote}${to}${quote}`);
+function transformBundle(files: BundleFile[], from: string, to: string): void {
+  const renames = new Map<string, string>();
+
+  const rewriteContents = (nodes: BundleFile[]): void => {
+    for (const file of nodes) {
+      if (file.files) {
+        rewriteContents(file.files);
+      } else if (file.name.endsWith(".js") && file.content) {
+        const text = gunzipSync(Buffer.from(file.content, "base64")).toString(
+          "utf8",
+        );
+        let replaced = text;
+        for (const quote of ['"', "'", "`"]) {
+          replaced = replaced
+            .split(`${quote}${from}${quote}`)
+            .join(`${quote}${to}${quote}`);
+        }
+        if (replaced !== text) {
+          const hashed = file.name.match(/^(.+)-([A-Za-z0-9_-]{6,16})\.js$/);
+          if (hashed) {
+            const newName = `${hashed[1]}-${mutateHash(hashed[2])}.js`;
+            renames.set(file.name, newName);
+            file.name = newName;
+          }
+          file.content = gzipSync(Buffer.from(replaced, "utf8")).toString(
+            "base64",
+          );
+        }
       }
-      file.content = gzipSync(Buffer.from(replaced, "utf8")).toString("base64");
     }
+  };
+
+  const rewriteReferences = (nodes: BundleFile[]): void => {
+    for (const file of nodes) {
+      if (file.files) {
+        rewriteReferences(file.files);
+      } else if (isTextFile(file.name) && file.content) {
+        const text = gunzipSync(Buffer.from(file.content, "base64")).toString(
+          "utf8",
+        );
+        let replaced = text;
+        for (const [oldName, newName] of renames) {
+          replaced = replaced.split(oldName).join(newName);
+        }
+        if (replaced !== text) {
+          file.content = gzipSync(Buffer.from(replaced, "utf8")).toString(
+            "base64",
+          );
+        }
+      }
+    }
+  };
+
+  rewriteContents(files);
+  if (renames.size > 0) {
+    rewriteReferences(files);
   }
 }
 
@@ -125,7 +184,7 @@ export async function startUpdateServer(opts: {
   ) as Bundle;
   const originalVersion = bundle.version;
 
-  rewriteVersion(bundle.files, originalVersion, TEST_BUNDLE_VERSION);
+  transformBundle(bundle.files, originalVersion, TEST_BUNDLE_VERSION);
   bundle.version = TEST_BUNDLE_VERSION;
   bundle.releaseDate = new Date().toISOString();
 

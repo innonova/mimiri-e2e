@@ -21,17 +21,20 @@ import { startUpdateServer, TestUpdateServer } from "../helpers/update-server";
  * the real Settings → Updates UI: check → download (signature verify,
  * install) → activate (window reload) → the app runs the new bundle.
  *
- * Currently Linux targz only — the simplest launch path; other formats and
- * platforms are follow-up work (flatpak/snap store update flows are out of
- * scope by design).
+ * Runs on Linux (targz) and Windows. macOS needs native-menu navigation and
+ * the other Linux formats are follow-up work (flatpak/snap store update
+ * flows are out of scope by design).
  */
+
+/** macOS is excluded for now: its menu bar is native (System Events). */
+const SUPPORTED_PLATFORMS: string[] = ["linux", "win32"];
 
 test.describe("bundle update", () => {
   let ctx: AppContext | undefined;
   let server: TestUpdateServer | undefined;
 
   test.beforeAll(async () => {
-    if (process.platform !== "linux") {
+    if (!SUPPORTED_PLATFORMS.includes(process.platform)) {
       return;
     }
     const meta = loadMeta();
@@ -62,8 +65,8 @@ test.describe("bundle update", () => {
 
   test("app updates to a served bundle through the UI", async () => {
     test.skip(
-      process.platform !== "linux",
-      "bundle-update test is Linux-only for now",
+      !SUPPORTED_PLATFORMS.includes(process.platform),
+      "bundle-update test runs on Linux and Windows for now (macOS needs native-menu navigation)",
     );
     const meta = loadMeta();
     test.skip(

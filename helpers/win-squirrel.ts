@@ -187,4 +187,9 @@ export function uninstallSquirrelApp(): void {
     spawnSync(updateExe, ["--uninstall", "-s"], { stdio: "ignore" });
   }
   fs.rmSync(squirrelRoot(), { recursive: true, force: true });
+  // The staged update the app wrote before handing off to Squirrel.
+  fs.rmSync(path.join(os.tmpdir(), "MimiriUpdate"), {
+    recursive: true,
+    force: true,
+  });
 }
