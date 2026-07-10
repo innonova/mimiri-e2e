@@ -149,6 +149,15 @@ export function supportsUpdateSeams(version: string): boolean {
 }
 
 /**
+ * Hardened bundle handling (verified promotion, health-checked activation,
+ * broken bundles fall back to base and self-repair) landed in the shell in
+ * 2.6.11.
+ */
+export function supportsBundleRepair(version: string): boolean {
+  return versionAtLeast(version, 2, 6, 11);
+}
+
+/**
  * Launches the packaged app and attaches over CDP.
  *
  * Note: published Mimiri builds have the Node `--inspect` CLI flags fused
