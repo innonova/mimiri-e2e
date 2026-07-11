@@ -4,3 +4,5 @@ artifacts
 test-results
 playwright-report
 package-lock.json
+# written by the version-watch bot in its own formatting
+state/
