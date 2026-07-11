@@ -91,9 +91,13 @@ jobs:
         if: runner.os != 'Linux'
         run: npm test
 
-      - name: Upload report on failure
+      - name: Summarize flaky/skipped tests
+        if: always()
+        run: npx tsx scripts/report-summary.ts
+
+      - name: Upload report
         uses: actions/upload-artifact@v7
-        if: failure()
+        if: always()
         with:
           name: playwright-report-${{ matrix.os }}${{ matrix.format && format('-{0}', matrix.format) || '' }}
           path: |

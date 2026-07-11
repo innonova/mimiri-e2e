@@ -19,9 +19,11 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
       them reduces AV/firewall friction for the _installed_ app. When fixed,
       extend `tests/win-signing.spec.ts` — a comment there marks the spot.
 - [ ] **Confirm `bundle-chain` comes alive** — the scenario self-skips while
-      the target shell's embedded base bundle is < 2.6.9. Once a shell ships
-      with an embedded bundle ≥ 2.6.9, check the scenario actually runs and
-      is green (it has never executed for real).
+      the target shell's embedded base bundle is < 2.6.9. The base bundle
+      version is only observable at runtime, so the smoke test annotates it
+      and the CI step summary now shows it ("Embedded base bundle: x.y.z").
+      Once that line reads ≥ 2.6.9, check the scenario actually runs and is
+      green (it has never executed for real).
 - [ ] **Decide on downgrade paths** — a user installing an older release over
       newer state is untested. If it's unsupported, say so somewhere
       user-visible and close this; if it's meant to work, it needs a scenario.
@@ -36,10 +38,10 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
       timing races (`MIMIRI_RETRIES=0`). If the 6 s renderer watchdog shows up
       as a recurring culprit, consider a client seam to extend it under
       `APP_TEST_MODE` (at the usual cost of not testing shipped behavior).
-- [ ] **Surface retry-passes on PR runs** — Playwright marks passed-on-retry
-      tests "flaky" in its report, but nobody sees it unless the run fails.
-      A CI annotation (or failing threshold) for flaky counts would stop
-      races hiding in the retry cushion on PRs too.
+- [x] **Surface retry-passes on PR runs** — done: a JSON reporter feeds
+      `scripts/report-summary.ts`, which lists flaky tests in the CI step
+      summary and emits `::warning::` annotations on every run. Revisit a
+      failing threshold if warnings get ignored.
 - [ ] **native-dialog-win.ts: UIA patterns instead of SendKeys** — the driver
       already locates the picker via UI Automation; using `ValuePattern` (set
       the path) and `InvokePattern` (press Select) removes the focus- and
@@ -59,7 +61,8 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
       update as the install population moves (telemetry).
 - [ ] **Watch skip counts** — specs degrade gracefully by self-skipping, which
       is also how coverage quietly evaporates (a Windows run reports
-      16 skipped today, mostly legitimate platform gates). Occasionally eyeball
-      the skipped list in CI output for gates that should no longer trigger.
+      16 skipped today, mostly legitimate platform gates). The CI step summary
+      now lists every skipped test with its reason — occasionally eyeball it
+      for gates that should no longer trigger.
 - [x] **Prettier the docs** — done: `docs/*.md` formatted in a dedicated
       commit and `format:check` now runs as a CI job in `e2e.yml`.

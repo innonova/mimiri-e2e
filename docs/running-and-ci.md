@@ -84,7 +84,13 @@ flowchart TD
   Linux legs apply the userns sysctl, run `setup-linux-dialogs.sh`, and wrap
   the test run in `run-with-dialogs.sh`. Channel defaults to canary. The
   nightly schedule runs with retries disabled (`MIMIRI_RETRIES=0`) so timing
-  races surface there instead of being absorbed as retry-passes.
+  races surface there instead of being absorbed as retry-passes. A small
+  `format` job runs `format:check`. Every leg ends with
+  `scripts/report-summary.ts` (also in upgrade-validation.yml), which reads
+  the JSON report into the step summary: flaky tests (plus `::warning::`
+  annotations), the skipped list with reasons, and the shell's embedded base
+  bundle version (annotated by the smoke test; gates the `bundle-chain`
+  scenario). The report artifact uploads on every run, not just failures.
 - **version-watch.yml** — polls the update host every 30 minutes, appends new
   versions to the per-channel history in `state/versions.json` (newest-first,
   capped at 20), commits as `version-watch[bot]`, and dispatches

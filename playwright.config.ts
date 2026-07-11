@@ -25,9 +25,13 @@ export default defineConfig({
   expect: {
     timeout: 10_000,
   },
-  reporter: process.env.CI
-    ? [["list"], ["html", { open: "never" }]]
-    : [["list"], ["html", { open: "never" }]],
+  // The JSON report feeds scripts/report-summary.mjs on CI (flaky/skip
+  // visibility); it is cheap enough to always produce.
+  reporter: [
+    ["list"],
+    ["html", { open: "never" }],
+    ["json", { outputFile: "test-results/report.json" }],
+  ],
   use: {
     trace: "retain-on-failure",
     screenshot: "only-on-failure",

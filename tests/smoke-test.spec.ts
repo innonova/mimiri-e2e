@@ -33,6 +33,13 @@ test.describe("smoke test", () => {
   test("test seam reports the expected version", async () => {
     const info = await getTestInfo(ctx.page);
     test.skip(info === undefined, "app predates the test seam (< 2.6.5)");
+    // Surfaced by scripts/report-summary.mjs in the CI run summary: the
+    // upgrade-flows bundle-chain scenario only comes alive once the embedded
+    // base bundle reaches 2.6.9, and this is the only place it's observable.
+    test.info().annotations.push({
+      type: "base-bundle-version",
+      description: info?.baseVersion ?? "unknown",
+    });
     expect(info?.version).toBe(ctx.version);
     expect(info?.platform).toBe(process.platform);
     // Note: info.channel is deliberately NOT compared to the feed channel —
