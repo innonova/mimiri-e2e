@@ -21,6 +21,7 @@ main-process access from tests — no dialog stubbing, no Electron API calls. Se
 | [upgrade-flows.md](upgrade-flows.md) | The release-validation matrix: real old version → real new version with seeded user state |
 | [native-dialogs.md](native-dialogs.md) | Driving real file dialogs on Linux (xdotool), macOS (System Events), Windows (UIA) |
 | [running-and-ci.md](running-and-ci.md) | Running locally, env vars, npm scripts, the three GitHub workflows and how they chain |
+| [backlog.md](backlog.md) | Open improvement items from the fit-for-purpose review: coverage gaps, hardening, recurring upkeep |
 
 ## The big picture
 
