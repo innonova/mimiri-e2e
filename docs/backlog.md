@@ -29,15 +29,18 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
       during `npm run make` unless the token's PIN caching is enabled. It
       must run **before** `rename-packages.mjs` computes the update-manifest
       signature over the final nupkg bytes.
-- [ ] **Confirm `bundle-chain` comes alive** — half-way there: shell 2.6.15
-      embeds base bundle 2.6.9, so the hard `< 2.6.9` gate now passes. But
-      each bundle hop also self-skips unless the offered bundle is
-      **strictly newer** than the embedded base (BundleManager discards
-      older ones), and the canary bundle stream is also at 2.6.9 — so the
-      scenario runs without performing a real bundle update until a bundle
-      \> 2.6.9 publishes while the shell still embeds 2.6.9. The CI step
-      summary shows the embedded base ("Embedded base bundle: x.y.z");
-      check the scenario actually exercises a hop once the streams diverge.
+- [x] **Confirm `bundle-chain` comes alive** — done, after fixing the real
+      blocker: the hard gate was a shell/bundle version mix-up, comparing
+      the _active bundle_ against the **shell** seam threshold (2.6.9)
+      while the renderer-side update seams landed in **bundle 2.6.5** — the
+      streams are unrelated and merely look similar. With the gate fixed
+      (`bundleSupportsUpdateSeams`), the scenario executed a real hop for
+      the first time: target shell 2.6.14 (embedded base 2.6.8), hop to
+      2.6.8 correctly no-oped, hop to bundle 2.6.9 ran the full update UI
+      flow and verified — green. Hops still no-op when the offered bundle
+      isn't strictly newer than the embedded base (e.g. shell 2.6.15 whose
+      base is already 2.6.9), which is correct behavior; CI exercises real
+      hops whenever the bundle stream is ahead of the target's base.
 - [ ] **Decide on downgrade paths** — a user installing an older release over
       newer state is untested. Product stance (July 2026): usually works,
       but there are cutoffs — a newer version can create items an older one

@@ -153,10 +153,22 @@ export function supportsUserDataDirFlag(version: string): boolean {
 
 /**
  * The MIMIRI_UPDATE_URL / MIMIRI_UPDATE_KEY seams (update-host and signing
- * key overrides for update testing) landed in the client in 2.6.9.
+ * key overrides for update testing) landed in the SHELL in 2.6.9. Takes a
+ * shell version — see bundleSupportsUpdateSeams for the bundle stream.
  */
 export function supportsUpdateSeams(version: string): boolean {
   return versionAtLeast(version, 2, 6, 9);
+}
+
+/**
+ * The renderer side of the update seams (honoring the injected
+ * updateUrl/updateKey and the update-UI testids) landed in the BUNDLE
+ * stream in 2.6.5 ("Add update-test seams and update-UI testids for e2e",
+ * mimiri-client). Shell and bundle versions are unrelated streams that
+ * merely look similar — don't gate one on the other's threshold.
+ */
+export function bundleSupportsUpdateSeams(version: string): boolean {
+  return versionAtLeast(version, 2, 6, 5);
 }
 
 /**
