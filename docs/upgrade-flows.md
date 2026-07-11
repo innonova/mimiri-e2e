@@ -139,5 +139,11 @@ UPGRADE_FLOWS=1 npx playwright test tests/upgrade-flows.spec.ts
 - Missing artifacts make a scenario self-skip with a hint, not fail.
 - flatpak/snap installs are machine-global; the runner (re)installs the
   starting version itself, so runs are re-entrant.
-- `bundle-chain` self-skips while the target's embedded base bundle is < 2.6.9
-  (an old _active_ bundle is what consumes `MIMIRI_UPDATE_URL`).
+- `bundle-chain` self-skips while the _active bundle_ predates the renderer
+  update seams (bundle < 2.6.5 — the active bundle is what consumes the
+  injected update URL and carries the update-UI testids). Careful with the
+  streams: the analogous shell threshold happens to be 2.6.9, and shell and
+  bundle numbering look similar while being completely unrelated — this gate
+  wrongly used the shell threshold until July 2026. Each hop also no-ops
+  unless the offered bundle is strictly newer than the shell's embedded
+  base.

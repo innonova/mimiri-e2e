@@ -9,6 +9,7 @@ import {
   getTestInfo,
   launchApp,
   supportsUpdateSeams,
+  bundleSupportsUpdateSeams,
 } from "../helpers/app";
 import { resolveFormat } from "../helpers/format";
 import { enterLocalMode, openCheckForUpdates } from "../helpers/ui";
@@ -204,8 +205,8 @@ async function updateBundleStep(state: RunState, to: string): Promise<void> {
   const info = await getTestInfo(state.ctx!.page);
   const active = activeBundleVersion(state) ?? info?.baseVersion;
   test.skip(
-    !active || !supportsUpdateSeams(active),
-    `active bundle ${active} cannot be pointed at the mock host (< 2.6.9)`,
+    !active || !bundleSupportsUpdateSeams(active),
+    `active bundle ${active} cannot drive the mock-host update UI (bundle < 2.6.5)`,
   );
   if (info?.baseVersion && !bundleAboveBase(to, info.baseVersion)) {
     console.log(
