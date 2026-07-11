@@ -1,4 +1,5 @@
 import { test, expect, Page } from "@playwright/test";
+import { spawnSync } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -318,14 +319,12 @@ async function squirrelShellStep(state: RunState, to: string): Promise<void> {
 }
 
 /**
- * Removes the app's state from the REAL Windows profile (real-profile
- * mode): ~\.mimiri plus the Chromium profile under %APPDATA%. Deletes
- * only these app dirs, never the profile itself.
+ * Removes the app's state from the REAL profile (real-profile mode):
+ * ~/.mimiri plus the Chromium profile (%APPDATA% on Windows, ~/Library
+ * on macOS) and, on macOS, the app's login-keychain item. Deletes only
+ * app state, never the profile itself.
  */
-function wipeWinRealProfile(): void {
-  if (process.platform !== "win32") {
-    throw new Error("real-profile wipe is Windows-only");
-  }
+function wipeRealProfile(): void {
   const rmOpts = {
     recursive: true,
     force: true,
@@ -333,10 +332,33 @@ function wipeWinRealProfile(): void {
     retryDelay: 200,
   };
   fs.rmSync(path.join(os.homedir(), ".mimiri"), rmOpts);
-  const appData =
-    process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming");
-  for (const name of ["Mimiri Notes", "mimiri-notes"]) {
-    fs.rmSync(path.join(appData, name), rmOpts);
+  if (process.platform === "win32") {
+    const appData =
+      process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming");
+    for (const name of ["Mimiri Notes", "mimiri-notes"]) {
+      fs.rmSync(path.join(appData, name), rmOpts);
+    }
+  } else if (process.platform === "darwin") {
+    for (const name of ["Mimiri Notes", "mimiri-notes"]) {
+      fs.rmSync(
+        path.join(os.homedir(), "Library", "Application Support", name),
+        rmOpts,
+      );
+    }
+    // The app keeps its encryption key in the login keychain — that is
+    // user state too. Best effort; the item may not exist.
+    for (let i = 0; i < 5; i++) {
+      const result = spawnSync("security", [
+        "delete-generic-password",
+        "-l",
+        "Mimiri Notes Key",
+      ]);
+      if (result.status !== 0) {
+        break;
+      }
+    }
+  } else {
+    throw new Error("real-profile mode is Windows/macOS-only");
   }
 }
 
@@ -470,17 +492,21 @@ test.describe("upgrade flows", () => {
         "home-layout profile (pre-2.6.6 shell in the chain) is not " +
           "available on this platform/format",
       );
-      // Windows offers no env-based home isolation: Electron resolves the
-      // profile (→ ~/.mimiri) and appData through Windows APIs that ignore
-      // USERPROFILE/APPDATA overrides. Pre-2.6.6 chains therefore run
-      // against the machine's REAL profile — faithful, but destructive
-      // (the profile is wiped around the run), so it needs an explicit
-      // opt-in from a disposable machine (CI runner, test VM).
-      const realProfile = needsHome && process.platform === "win32";
+      // Neither Windows nor macOS offers env-based home isolation:
+      // Windows resolves the profile through APIs that ignore
+      // USERPROFILE/APPDATA overrides, and macOS keeps the app's
+      // encryption key in the per-user login keychain (a fake HOME blocks
+      // boot on a "Keychain Not Found" modal). Pre-2.6.6 chains on both
+      // therefore run against the machine's REAL profile — faithful, but
+      // destructive (profile state is wiped around the run), so it needs
+      // an explicit opt-in from a disposable machine (CI runner, test VM).
+      const realProfile =
+        needsHome &&
+        (process.platform === "win32" || process.platform === "darwin");
       test.skip(
         realProfile && process.env.MIMIRI_REAL_PROFILE !== "1",
-        "pre-2.6.6 Windows chains use (and wipe) the machine's real " +
-          "profile — set MIMIRI_REAL_PROFILE=1 on a disposable machine",
+        "pre-2.6.6 Windows/macOS chains use (and wipe) the machine's " +
+          "real profile — set MIMIRI_REAL_PROFILE=1 on a disposable machine",
       );
 
       const missing = missingArtifacts(scenario, rv);
@@ -509,7 +535,7 @@ test.describe("upgrade flows", () => {
 
       try {
         if (realProfile) {
-          wipeWinRealProfile();
+          wipeRealProfile();
         }
         const config = serverConfig(scenario, rv);
         if (config) {
@@ -545,7 +571,7 @@ test.describe("upgrade flows", () => {
         };
         fs.rmSync(state.workDir, rmOpts);
         if (realProfile) {
-          wipeWinRealProfile();
+          wipeRealProfile();
         } else {
           fs.rmSync(state.layout.root, rmOpts);
         }

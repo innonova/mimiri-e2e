@@ -237,7 +237,20 @@ export async function launchApp(
   let isolationEnv: Record<string, string>;
   if (opts.homeIsolation) {
     if (process.platform === "darwin") {
-      isolationEnv = { HOME: userDataDir };
+      // A fake HOME breaks the app on macOS: it stores "Mimiri Notes
+      // Key" in the LOGIN keychain, which securityd resolves per-user
+      // (not from $HOME) — with a redirected HOME the app blocks on a
+      // "Keychain Not Found" modal before CDP answers. Like Windows,
+      // callers must pass the REAL home (real-profile mode) and wipe the
+      // app state around the run.
+      if (path.resolve(userDataDir) !== path.resolve(os.homedir())) {
+        throw new Error(
+          "homeIsolation on macOS only works against the real profile — " +
+            "pass userDataDir: os.homedir() (and wipe the app state " +
+            "around the run)",
+        );
+      }
+      isolationEnv = {};
     } else if (process.platform === "win32") {
       // Windows has NO working env-based home isolation: Electron
       // resolves home (→ ~/.mimiri) and appData through Windows APIs
