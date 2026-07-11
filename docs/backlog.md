@@ -42,10 +42,11 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
       `scripts/report-summary.ts`, which lists flaky tests in the CI step
       summary and emits `::warning::` annotations on every run. Revisit a
       failing threshold if warnings get ignored.
-- [ ] **native-dialog-win.ts: UIA patterns instead of SendKeys** — the driver
-      already locates the picker via UI Automation; using `ValuePattern` (set
-      the path) and `InvokePattern` (press Select) removes the focus- and
-      timing-dependence of keystrokes.
+- [x] **native-dialog-win.ts: UIA patterns instead of SendKeys** — done, with
+      a twist: the picker's raw Win32 controls expose no UIA patterns (probed
+      on Win11 — "Unsupported Pattern"), so the driver uses UIA to locate the
+      control handles and `WM_SETTEXT`/`BM_CLICK` to drive them. Same win:
+      no focus, foreground, or keystroke-timing dependence.
 - [ ] **native-dialog-linux.ts: AT-SPI escape hatch** — the sidebar bookmark
       is clicked at a fixed pixel offset, stable only because Xvfb geometry
       and portal-gtk are pinned. If an Ubuntu portal-gtk update moves the
