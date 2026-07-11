@@ -2,7 +2,7 @@ import { spawnSync } from "child_process";
 
 /**
  * Drives real native file dialogs (the Win32 IFileDialog folder picker) on
- * Windows via UI Automation + SendKeys, run through PowerShell.
+ * Windows via UI Automation + window messages, run through PowerShell.
  *
  * Electron's folder picker is an owned window (class #32770) nested under the
  * app's main window (class Chrome_WidgetWin_1), not a child of the desktop
@@ -10,9 +10,19 @@ import { spawnSync } from "child_process";
  * that child's NativeWindowHandle. Reaching it this way avoids walking
  * Electron's (huge, slow) accessibility subtree, which otherwise hangs UIA.
  *
- * The picker is then driven by bringing it foreground and typing the target
- * path + Enter (SendKeys). This requires an interactive desktop session;
- * winDialogSupport() probes for one and the spec skips itself without it.
+ * Input is driven by handle, not keystrokes: UIA locates the picker's Win32
+ * controls (the "Folder:" edit, AutomationId 1152; Select Folder / Cancel,
+ * AutomationIds 1 / 2 — the IDOK/IDCANCEL dialog control ids), then
+ * WM_SETTEXT sets the path and BM_CLICK presses the button. SendMessage
+ * targets the control directly, so nothing depends on focus, foreground
+ * state, or keystroke timing. UIA ValuePattern/InvokePattern would be the
+ * canonical route, but the picker's raw Win32 controls expose no patterns to
+ * the managed UIA client (probed on Windows 11: "Unsupported Pattern"), so
+ * window messages it is.
+ *
+ * A real interactive desktop is still required for the dialog to exist at
+ * all; winDialogSupport() probes for one and the spec skips itself without
+ * it.
  */
 
 export interface WinNativeDialog {
@@ -42,10 +52,22 @@ const UIA_PRELUDE =
   "$AE=[Windows.Automation.AutomationElement];" +
   "$TC=[Windows.Automation.Condition]::TrueCondition;";
 
-/** SendKeys treats these as syntax; escape by wrapping each in braces. */
-function escapeSendKeys(s: string): string {
-  return s.replace(/[+^%~(){}\[\]]/g, (m) => `{${m}}`);
-}
+/** SendMessage/IsWindow P/Invoke plus the dialog element from CLAUDE_HANDLE. */
+const DIALOG_PRELUDE =
+  UIA_PRELUDE +
+  "Add-Type -MemberDefinition '" +
+  '[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr h, uint m, IntPtr w, string l);' +
+  '[DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint m, IntPtr w, IntPtr l);' +
+  '[DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);' +
+  "' -Name U -Namespace Win32;" +
+  "$h=[IntPtr][int64]$env:CLAUDE_HANDLE;" +
+  "$dlg=$AE::FromHandle($h);" +
+  "function FindById($id){" +
+  "  $c=New-Object Windows.Automation.PropertyCondition($AE::AutomationIdProperty,$id);" +
+  "  $e=$dlg.FindFirst('Descendants',$c);" +
+  '  if($e -eq $null){throw "dialog control $id not found"}' +
+  "  [IntPtr]$e.Current.NativeWindowHandle" +
+  "}";
 
 /**
  * True when an interactive desktop with windows is reachable (i.e. UIA can
@@ -105,38 +127,47 @@ export async function waitForWinFileDialog(
   return { handle: m[1] };
 }
 
-const FOREGROUND_PRELUDE =
-  "Add-Type -MemberDefinition '[DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h);' -Name W -Namespace Win32;" +
-  "Add-Type -AssemblyName System.Windows.Forms;" +
-  "$h=[IntPtr][int64]$env:CLAUDE_HANDLE;" +
-  "[void][Win32.W]::SetForegroundWindow($h);" +
-  "Start-Sleep -Milliseconds 500;";
-
-/** Types `dir` into the picker and confirms (Enter navigates, Enter accepts). */
+/**
+ * Sets `dir` in the picker's folder edit (WM_SETTEXT) and presses Select
+ * Folder (BM_CLICK). An absolute path is accepted in one click; if the
+ * dialog instead navigated (still open), press the button once more to
+ * accept the now-current folder.
+ */
 export async function selectWinDirectory(
   dialog: WinNativeDialog,
   dir: string,
 ): Promise<void> {
   const script =
-    FOREGROUND_PRELUDE +
-    "[System.Windows.Forms.SendKeys]::SendWait($env:CLAUDE_KEYS);" +
-    "Start-Sleep -Milliseconds 500;" +
-    '[System.Windows.Forms.SendKeys]::SendWait("{ENTER}");' +
+    DIALOG_PRELUDE +
+    "$edit=FindById '1152';" +
+    "$ok=FindById '1';" +
+    "[void][Win32.U]::SendMessage($edit,0x000C,[IntPtr]::Zero,[string]$env:CLAUDE_DIR);" +
+    "Start-Sleep -Milliseconds 200;" +
+    "[void][Win32.U]::SendMessage($ok,0x00F5,[IntPtr]::Zero,[IntPtr]::Zero);" +
     "Start-Sleep -Milliseconds 700;" +
-    '[System.Windows.Forms.SendKeys]::SendWait("{ENTER}")';
+    "if([Win32.U]::IsWindow($h)){" +
+    "  $ok2=FindById '1';" +
+    "  [void][Win32.U]::SendMessage($ok2,0x00F5,[IntPtr]::Zero,[IntPtr]::Zero);" +
+    "  Start-Sleep -Milliseconds 700" +
+    "}" +
+    'if([Win32.U]::IsWindow($h)){throw "picker still open after accept"}';
   const r = psRun(script, {
     CLAUDE_HANDLE: dialog.handle,
-    CLAUDE_KEYS: escapeSendKeys(dir),
+    CLAUDE_DIR: dir,
   });
   if (!r.ok) {
     throw new Error(`failed to drive folder picker: ${r.out}`);
   }
 }
 
-/** Dismisses the picker with Escape. */
+/** Dismisses the picker via its Cancel button (BM_CLICK). */
 export async function cancelWinDialog(dialog: WinNativeDialog): Promise<void> {
   const script =
-    FOREGROUND_PRELUDE + '[System.Windows.Forms.SendKeys]::SendWait("{ESC}")';
+    DIALOG_PRELUDE +
+    "$cancel=FindById '2';" +
+    "[void][Win32.U]::SendMessage($cancel,0x00F5,[IntPtr]::Zero,[IntPtr]::Zero);" +
+    "Start-Sleep -Milliseconds 700;" +
+    'if([Win32.U]::IsWindow($h)){throw "picker still open after cancel"}';
   const r = psRun(script, { CLAUDE_HANDLE: dialog.handle });
   if (!r.ok) {
     throw new Error(`failed to cancel folder picker: ${r.out}`);

@@ -28,6 +28,7 @@ install dirs, process lists).
 | [mac-signing](../tests/mac-signing.spec.ts)                     | unsigned / un-notarized .app bricking downloads  | mac only                          | fetched .app                                                     |
 | [win-signing](../tests/win-signing.spec.ts)                     | unsigned Setup.exe tripping SmartScreen          | win only                          | fetched Setup.exe                                                |
 | [export-import](../tests/export-import.spec.ts)                 | broken real native file dialogs                  | all (with dialog env)             | see [native-dialogs.md](native-dialogs.md)                       |
+| [staging-sync](../tests/staging-sync.spec.ts)                   | shipped build broken against a real backend      | all                               | shell with `MIMIRI_USE_DEV_API` (> 2.6.13), dev backend up       |
 | [upgrade-flows](../tests/upgrade-flows.spec.ts)                 | new release breaking **existing users**          | all                               | `UPGRADE_FLOWS=1`, see [upgrade-flows.md](upgrade-flows.md)      |
 
 ## Spec details
@@ -130,6 +131,28 @@ would notice a broken signature (Squirrel validates only the RELEASES SHA1),
 but SmartScreen/Defender treat unsigned installer downloads very differently.
 Deliberately limited to `Setup.exe`: the binaries inside the nupkg (app exe,
 execution stub, `squirrel.exe`) have always shipped unsigned.
+
+### staging-sync.spec.ts
+
+The only spec where the shipped client talks to a real server: launches with
+`MIMIRI_USE_DEV_API=1` (the shell seam that switches the renderer to its
+compiled-in dev API host **and dev server key pair** — requests are encrypted
+to the server key, so the host cannot be switched without it), then runs the
+core product loop against dev-api: promote the local account to a cloud
+account (real proof-of-work — the dev-mode bypass is compiled out of
+published builds), create a note, wait for the actual `/sync/push-changes`
+of the save (idle status alone is not proof), log in from a second fresh
+profile and find the decrypted note, delete the account through the UI, and
+confirm the login now fails. Credentials are random per run; a run that dies
+mid-flow can leave a stray account on the dev cluster.
+
+Traps encountered while writing it: the seam must be **confirmed via
+`mimiriTestInfo.useDevApi`** before creating anything (old shells silently
+ignore the env var and would talk to production — there is also a
+network-level assert on the `/user/available` response URL); and a note
+created **before the account-promotion sync settles** can land outside the
+promoted data and silently never reach the server (the spec waits for stable
+sync-idle after promotion).
 
 ### export-import.spec.ts
 

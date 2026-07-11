@@ -6,11 +6,14 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
 
 ## Coverage gaps
 
-- [ ] **Staging-sync smoke test** — the core product loop (account creation,
-      encryption key handling, server sync) is never exercised against a
-      published build: every spec runs `enterLocalMode`. Needs a test/staging
-      backend and a credentials story for CI. The largest remaining
-      "works in dev, broken in the shipped build" surface.
+- [x] **Staging-sync smoke test** — done and **live**: `tests/staging-sync.spec.ts`
+      runs the full loop (account creation with real PoW, sync,
+      fresh-profile round-trip, account deletion) against dev-api,
+      verified green against published shell 2.6.15 (bundle 2.6.9 — the
+      first with the `MIMIRI_USE_DEV_API` seam _and_ the dev host/key pair
+      baked in). No credentials story needed — accounts are random per run
+      and deleted through the UI. On builds without the seam or the baked
+      dev config the spec skips with an explanatory reason.
 - [ ] **Sign the binaries inside the nupkg** _(mimiri-client-electron /
       build pipeline, not this repo)_ — only `Setup.exe` carries the
       innonova GmbH Authenticode signature. The app exe,
@@ -18,19 +21,50 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
       installed `Update.exe`) ship unsigned, verified back to 2.5.72. Signing
       them reduces AV/firewall friction for the _installed_ app. When fixed,
       extend `tests/win-signing.spec.ts` — a comment there marks the spot.
-- [ ] **Confirm `bundle-chain` comes alive** — the scenario self-skips while
-      the target shell's embedded base bundle is < 2.6.9. The base bundle
-      version is only observable at runtime, so the smoke test annotates it
-      and the CI step summary now shows it ("Embedded base bundle: x.y.z").
-      Once that line reads ≥ 2.6.9, check the scenario actually runs and is
-      green (it has never executed for real).
+      How signing works today: on the build server, a **manual** signtool
+      step that prompts for the PIN of a hardware signing key — which is why
+      no signing appears in the repo. The canonical fix is `signWithParams`
+      on maker-squirrel (electron-winstaller then signs every PE before
+      packing); with the hardware token that means one PIN prompt per file
+      during `npm run make` unless the token's PIN caching is enabled. It
+      must run **before** `rename-packages.mjs` computes the update-manifest
+      signature over the final nupkg bytes.
+- [ ] **Confirm `bundle-chain` comes alive** — half-way there: shell 2.6.15
+      embeds base bundle 2.6.9, so the hard `< 2.6.9` gate now passes. But
+      each bundle hop also self-skips unless the offered bundle is
+      **strictly newer** than the embedded base (BundleManager discards
+      older ones), and the canary bundle stream is also at 2.6.9 — so the
+      scenario runs without performing a real bundle update until a bundle
+      \> 2.6.9 publishes while the shell still embeds 2.6.9. The CI step
+      summary shows the embedded base ("Embedded base bundle: x.y.z");
+      check the scenario actually exercises a hop once the streams diverge.
 - [ ] **Decide on downgrade paths** — a user installing an older release over
-      newer state is untested. If it's unsupported, say so somewhere
-      user-visible and close this; if it's meant to work, it needs a scenario.
+      newer state is untested. Product stance (July 2026): usually works,
+      but there are cutoffs — a newer version can create items an older one
+      doesn't understand, and how to handle that has not been designed.
+      Needs that product decision (which versions must tolerate which data)
+      before a test scenario makes sense; parked until then.
 - [ ] **appimage upgrade coverage** — upgrade-validation's matrix skips
       appimage (and arm64). The targz external-install spec covers similar
       mechanics, but the single-file-replace path itself is untested. Low
       priority.
+
+## Product issues found by the suite
+
+- [ ] **Data written right after account promotion can silently miss the
+      server** _(mimiri-client, found July 2026 while building
+      staging-sync)_ — a note created ~2–4 s after `promoteToCloudAccount`
+      completed did not reach the server, even though the client reported a
+      successful `/sync/push-changes` and stable sync-status `idle`; a
+      fresh profile logging in did not see the note (reproduced repeatedly
+      until the spec added a wait for sync-idle after promotion; also
+      produces "Getting Started copied" duplicates in some runs). The
+      window is however long the promotion's background copy takes — a few
+      seconds on CI with two default notes, plausibly human-reachable with
+      many notes on a slow link. Untested: whether the stranded note is
+      pushed on the app's next launch (delayed sync) or lost for good — a
+      repro that kills the app inside the window and relaunches would
+      settle it.
 
 ## Hardening / flakiness
 
@@ -42,10 +76,11 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
       `scripts/report-summary.ts`, which lists flaky tests in the CI step
       summary and emits `::warning::` annotations on every run. Revisit a
       failing threshold if warnings get ignored.
-- [ ] **native-dialog-win.ts: UIA patterns instead of SendKeys** — the driver
-      already locates the picker via UI Automation; using `ValuePattern` (set
-      the path) and `InvokePattern` (press Select) removes the focus- and
-      timing-dependence of keystrokes.
+- [x] **native-dialog-win.ts: UIA patterns instead of SendKeys** — done, with
+      a twist: the picker's raw Win32 controls expose no UIA patterns (probed
+      on Win11 — "Unsupported Pattern"), so the driver uses UIA to locate the
+      control handles and `WM_SETTEXT`/`BM_CLICK` to drive them. Same win:
+      no focus, foreground, or keystroke-timing dependence.
 - [ ] **native-dialog-linux.ts: AT-SPI escape hatch** — the sidebar bookmark
       is clicked at a fixed pixel offset, stable only because Xvfb geometry
       and portal-gtk are pinned. If an Ubuntu portal-gtk update moves the
