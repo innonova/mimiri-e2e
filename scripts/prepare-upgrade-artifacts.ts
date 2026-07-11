@@ -19,10 +19,12 @@
  */
 import fs from "fs";
 import path from "path";
-import { spawnSync } from "child_process";
 import { resolveFormat } from "../helpers/format";
 import {
+  homeLayoutAvailable,
+  needsHomeLayout,
   resolveVersions,
+  runFetchArtifact,
   scenarioAppliesTo,
   scenarioVersions,
   scenarios,
@@ -45,16 +47,7 @@ function compareVersions(a: string, b: string): number {
 
 function fetchArtifact(version: string, format: string): void {
   console.log(`[prepare-upgrade] fetch ${version} (${format})`);
-  const result = spawnSync(
-    "npx",
-    ["tsx", "scripts/fetch-artifact.ts", version, `--format=${format}`],
-    { stdio: "inherit" },
-  );
-  if (result.status !== 0) {
-    throw new Error(
-      `fetch-artifact ${version} exited with status ${result.status}`,
-    );
-  }
+  runFetchArtifact(version, format);
 }
 
 async function fetchRealBundle(version: string): Promise<void> {
@@ -131,6 +124,17 @@ async function main(): Promise<void> {
     if (!versions) {
       console.log(
         `[prepare-upgrade] ${scenario.id}: selectors unresolvable, skipping`,
+      );
+      continue;
+    }
+    if (
+      needsHomeLayout(versions.shells) &&
+      !homeLayoutAvailable(process.platform, format)
+    ) {
+      // The runner will skip it too — don't download its artifacts.
+      console.log(
+        `[prepare-upgrade] ${scenario.id}: home-layout profile not ` +
+          `available here, skipping`,
       );
       continue;
     }

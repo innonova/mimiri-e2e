@@ -1,5 +1,4 @@
 import { test, expect, Page } from "@playwright/test";
-import { spawnSync } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -9,7 +8,6 @@ import {
   getTestInfo,
   launchApp,
   supportsUpdateSeams,
-  supportsUserDataDirFlag,
 } from "../helpers/app";
 import { resolveFormat } from "../helpers/format";
 import { enterLocalMode, openCheckForUpdates } from "../helpers/ui";
@@ -30,8 +28,11 @@ import {
   Scenario,
   Step,
   bundleAboveBase,
+  homeLayoutAvailable,
+  needsHomeLayout,
   resolveSelector,
   resolveVersions,
+  runFetchArtifact,
   scenarioAppliesTo,
   scenarioVersions,
   scenarios,
@@ -134,14 +135,7 @@ async function launchInstalled(
  * mid-test upgrade leaves the TARGET installed, not the starting version.
  */
 function installPackage(version: string, format: string): void {
-  const result = spawnSync(
-    "npx",
-    ["tsx", "scripts/fetch-artifact.ts", version, `--format=${format}`],
-    { stdio: "inherit" },
-  );
-  if (result.status !== 0) {
-    throw new Error(`fetch-artifact ${version} exited with ${result.status}`);
-  }
+  runFetchArtifact(version, format);
 }
 
 async function installStep(state: RunState, version: string): Promise<void> {
@@ -442,16 +436,11 @@ test.describe("upgrade flows", () => {
         }
       }
 
-      const needsHome = versions!.shells.some(
-        (v) => !supportsUserDataDirFlag(v),
-      );
+      const needsHome = needsHomeLayout(versions!.shells);
       test.skip(
-        needsHome && process.platform === "win32",
-        "pre-2.6.6 profile continuity on Windows is not wired up yet",
-      );
-      test.skip(
-        needsHome && (format === "flatpak" || format === "snap"),
-        "home-layout profiles apply to targz-style formats only",
+        needsHome && !homeLayoutAvailable(process.platform, format),
+        "home-layout profile (pre-2.6.6 shell in the chain) is not " +
+          "available on this platform/format",
       );
 
       const missing = missingArtifacts(scenario, rv);

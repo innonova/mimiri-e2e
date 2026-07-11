@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
-import { versionAtLeast } from "./app";
+import { spawnSync } from "child_process";
+import { supportsUserDataDirFlag, versionAtLeast } from "./app";
 import { AppFormat } from "./format";
 
 /**
@@ -264,6 +265,47 @@ export function scenarioAppliesTo(
     (scenario.platforms?.includes(platform) ?? true) &&
     (scenario.formats?.includes(format) ?? true)
   );
+}
+
+/**
+ * Whether the scenario's profile must use the home-derived layout: any
+ * pre-2.6.6 shell ignores --user-data-dir, and the two layouts are
+ * different directory shapes, so the WHOLE chain must run home-derived
+ * (launchApp homeIsolation) as soon as one hop needs it.
+ */
+export function needsHomeLayout(shells: string[]): boolean {
+  return shells.some((v) => !supportsUserDataDirFlag(v));
+}
+
+/**
+ * Where the home layout works: not on Windows (pre-2.6.6 profile
+ * continuity there is unprobed — USERPROFILE-derived paths, bundles next
+ * to the install) and not under flatpak/snap confinement.
+ */
+export function homeLayoutAvailable(
+  platform: NodeJS.Platform,
+  format: AppFormat,
+): boolean {
+  return platform !== "win32" && format !== "flatpak" && format !== "snap";
+}
+
+/**
+ * Runs fetch-artifact for a version+format (download cached/idempotent;
+ * installs the package on flatpak/snap). Shared by the prep script and
+ * the runner's package-manager steps. `shell: true` because on Windows
+ * npx is a .cmd shim spawnSync cannot exec directly.
+ */
+export function runFetchArtifact(version: string, format: string): void {
+  const result = spawnSync(
+    "npx",
+    ["tsx", "scripts/fetch-artifact.ts", version, `--format=${format}`],
+    { stdio: "inherit", shell: process.platform === "win32" },
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      `fetch-artifact ${version} exited with status ${result.status}`,
+    );
+  }
 }
 
 /**
