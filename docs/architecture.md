@@ -53,9 +53,9 @@ the app start as plain Node ("bad option" on Chromium flags). `launchApp` and
 
 Two directory layouts exist, and they are **not interchangeable**:
 
-| Layout | How | Requires |
-| --- | --- | --- |
-| **flag** | `--user-data-dir=<tmpdir>`; data lands directly in the dir | client ≥ 2.6.6 |
+| Layout   | How                                                                                | Requires                              |
+| -------- | ---------------------------------------------------------------------------------- | ------------------------------------- |
+| **flag** | `--user-data-dir=<tmpdir>`; data lands directly in the dir                         | client ≥ 2.6.6                        |
 | **home** | fake `$HOME`; app derives real-user paths (`~/.mimiri` + `~/.config/mimiri-notes`) | env-based redirect works (Linux only) |
 
 Notes live in **IndexedDB inside the Chromium profile**, not under `.mimiri`
@@ -134,14 +134,14 @@ flowchart TD
 
 Published builds differ; specs probe `meta.version` instead of assuming:
 
-| Version | Capability | Gate in `app.ts` |
-| --- | --- | --- |
-| 2.6.5 | `APP_TEST_MODE=1` seam (`globalThis.mimiriTestInfo`) | `getTestInfo` returns undefined below |
-| 2.6.6 | `--user-data-dir` flag | `supportsUserDataDirFlag` |
-| 2.6.9 | `MIMIRI_UPDATE_URL` / `MIMIRI_UPDATE_KEY` seams | `supportsUpdateSeams` |
-| 2.6.10 | clears Chromium cache in `activate()` | (tests clear via CDP to also cover 2.6.9) |
-| 2.6.11 | bundle self-repair, missing-file 404s | `supportsBundleRepair` (gates on 2.6.12 — the version that made it reliable) |
-| 2.6.13 | store-install detection | `supportsStoreDetection` |
+| Version | Capability                                           | Gate in `app.ts`                                                             |
+| ------- | ---------------------------------------------------- | ---------------------------------------------------------------------------- |
+| 2.6.5   | `APP_TEST_MODE=1` seam (`globalThis.mimiriTestInfo`) | `getTestInfo` returns undefined below                                        |
+| 2.6.6   | `--user-data-dir` flag                               | `supportsUserDataDirFlag`                                                    |
+| 2.6.9   | `MIMIRI_UPDATE_URL` / `MIMIRI_UPDATE_KEY` seams      | `supportsUpdateSeams`                                                        |
+| 2.6.10  | clears Chromium cache in `activate()`                | (tests clear via CDP to also cover 2.6.9)                                    |
+| 2.6.11  | bundle self-repair, missing-file 404s                | `supportsBundleRepair` (gates on 2.6.12 — the version that made it reliable) |
+| 2.6.13  | store-install detection                              | `supportsStoreDetection`                                                     |
 
 `SHELL_UPGRADE_BASE_VERSION = "2.6.9"` (first release with update seams) is the
 pinned starting point for every shell-upgrade / external-install spec. If old

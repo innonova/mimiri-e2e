@@ -11,12 +11,12 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
       published build: every spec runs `enterLocalMode`. Needs a test/staging
       backend and a credentials story for CI. The largest remaining
       "works in dev, broken in the shipped build" surface.
-- [ ] **Sign the binaries inside the nupkg** *(mimiri-client-electron /
-      build pipeline, not this repo)* — only `Setup.exe` carries the
+- [ ] **Sign the binaries inside the nupkg** _(mimiri-client-electron /
+      build pipeline, not this repo)_ — only `Setup.exe` carries the
       innonova GmbH Authenticode signature. The app exe,
       `Mimiri Notes_ExecutionStub.exe` and `squirrel.exe` (which becomes the
       installed `Update.exe`) ship unsigned, verified back to 2.5.72. Signing
-      them reduces AV/firewall friction for the *installed* app. When fixed,
+      them reduces AV/firewall friction for the _installed_ app. When fixed,
       extend `tests/win-signing.spec.ts` — a comment there marks the spot.
 - [ ] **Confirm `bundle-chain` comes alive** — the scenario self-skips while
       the target shell's embedded base bundle is < 2.6.9. Once a shell ships
@@ -61,6 +61,5 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
       is also how coverage quietly evaporates (a Windows run reports
       16 skipped today, mostly legitimate platform gates). Occasionally eyeball
       the skipped list in CI output for gates that should no longer trigger.
-- [ ] **Prettier the docs** — `docs/*.md` doesn't pass `format:check` (CI
-      doesn't run it). Either run `npm run format` in a dedicated commit or
-      scope prettier to code files.
+- [x] **Prettier the docs** — done: `docs/*.md` formatted in a dedicated
+      commit and `format:check` now runs as a CI job in `e2e.yml`.

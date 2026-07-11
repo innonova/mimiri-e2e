@@ -1,6 +1,6 @@
 # Testing unreleased changes
 
-How to e2e-test client or shell changes *before* they're published — and the
+How to e2e-test client or shell changes _before_ they're published — and the
 release mechanics of the sibling repos that make the recipes make sense.
 
 ## Release mechanics (sibling repos)
@@ -10,7 +10,7 @@ release mechanics of the sibling repos that make the recipes make sense.
   channel. Bump the patch version in `package.json` when making a new version.
 - **mimiri-client-electron** (shell): merging/pushing to `main` IS the release
   — a fresh build ships with the `package.json` version. After bumping, run
-  `npm run update-bundle`; it embeds the latest *published canary* bundle as
+  `npm run update-bundle`; it embeds the latest _published canary_ bundle as
   base (so publish client changes first if the embedded bundle must include
   them) and regenerates `bundle-info.json` + `src/base-version.ts`.
 - Bundle and shell versions are **separate streams** (e.g. shell 2.6.10 ships

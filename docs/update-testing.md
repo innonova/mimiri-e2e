@@ -19,12 +19,12 @@ test signing key). Test-mode clients also skip all update checks unless
 
 `helpers/update-server.ts` implements both:
 
-| | `startUpdateServer` | `startPassthroughUpdateServer` |
-| --- | --- | --- |
-| Used by | `tests/update*.spec.ts` | `tests/upgrade-flows.spec.ts` |
-| Serves | the artifact's real bundle **transformed** to version 99.0.0 and re-signed with a fresh per-run RSA key | real production-signed bundles/installers **byte-for-byte** |
-| Env seams | `MIMIRI_UPDATE_URL` + `MIMIRI_UPDATE_KEY` | `MIMIRI_UPDATE_URL` **only** — the client's baked-in production key must validate |
-| Point | exercise the update *mechanism* against a version that can't collide with a real one | replay real version history under test control |
+|           | `startUpdateServer`                                                                                     | `startPassthroughUpdateServer`                                                    |
+| --------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Used by   | `tests/update*.spec.ts`                                                                                 | `tests/upgrade-flows.spec.ts`                                                     |
+| Serves    | the artifact's real bundle **transformed** to version 99.0.0 and re-signed with a fresh per-run RSA key | real production-signed bundles/installers **byte-for-byte**                       |
+| Env seams | `MIMIRI_UPDATE_URL` + `MIMIRI_UPDATE_KEY`                                                               | `MIMIRI_UPDATE_URL` **only** — the client's baked-in production key must validate |
+| Point     | exercise the update _mechanism_ against a version that can't collide with a real one                    | replay real version history under test control                                    |
 
 Both start **disarmed** (the channel pointer offers `0.0.1`, so startup checks
 are no-ops) and are armed per test with `server.setLatest(version)` — or
@@ -54,11 +54,11 @@ verify real bundles downloaded as fixtures before trusting them.
 
 ## The rename cascade (why the transform is nontrivial)
 
-To make the update *observable*, the mock rewrites the baked version constant
+To make the update _observable_, the mock rewrites the baked version constant
 inside the bundle's JS assets (it's a **template literal** `` `2.6.10` ``, not a
 quoted string). But changing content behind an unchanged `app://` URL gets
 served **stale from Chromium's HTTP cache** after activation — this bit twice
-in real bugs (a stale main chunk; a cached lazy chunk importing the *old* main
+in real bugs (a stale main chunk; a cached lazy chunk importing the _old_ main
 chunk, producing a double-booted app). Real builds never hit this because
 content-hashed filenames change when content changes.
 
@@ -101,7 +101,7 @@ sequenceDiagram
   — Squirrel only trusts the SHA1 in the RELEASES line, which the mock
   computes from whatever file it serves and raw-signs, so a real package
   works as-is and the updated binary gets proven, not just the swap. When the
-  fetched artifact *is* the base, the payload falls back to the published
+  fetched artifact _is_ the base, the payload falls back to the published
   nupkg **repacked** with a bumped nuspec version
   (`helpers/win-squirrel.ts::repackNupkg`, binaries unchanged) so the
   mechanism still runs.
@@ -122,16 +122,15 @@ sequenceDiagram
   makes the update UI silently reset, presenting as a download timeout.
 - **Disarm the mock (`setLatest(null)`) before relaunching after a shell
   update**: a pointer still offering the now-installed version reads as a
-  pending *bundle* of that version — a state no real host produces — and boot
+  pending _bundle_ of that version — a state no real host produces — and boot
   wedges in the update screen.
 - `net::ERR_UNEXPECTED` on an `app://` URL on shells < 2.6.11 means **file
-  missing on disk** at the active bundle path (the protocol handler had no
-  404) — not a network problem.
+  missing on disk** at the active bundle path (the protocol handler had no 404) — not a network problem.
 - The shell watchdog fires `loadURL()` if the renderer is quiet for 6 s; on slow
   machines that can land mid-activation and (pre-2.6.10) revive the cached
   pre-update page — the reason for the explicit CDP cache clear.
 - When every bundle-**activating** spec fails with "element(s) not found" on
-  the update-page testids right after a *successful* activation, check the
+  the update-page testids right after a _successful_ activation, check the
   **version inside `artifacts/<ver>/bundle.json`**: the mock re-versions
   whatever bundle it's given, so a stale fixture (e.g. a 2.5.x bundle cached
   by an older fetch-artifact, which fell back to the stable pointer) activates

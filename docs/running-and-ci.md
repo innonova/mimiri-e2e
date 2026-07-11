@@ -22,15 +22,15 @@ persistent across reboots).
 
 ## npm scripts
 
-| Script | Does |
-| --- | --- |
-| `fetch` / `fetch:canary` | download + prepare an artifact (`scripts/fetch-artifact.ts`) |
-| `prepare-upgrade` | fetch everything an upgrade-flow run needs (`--format=X`, `--scenario=id,id`) |
-| `watch-versions` | dry-run of the version watcher (report only) |
-| `test` / `test:headed` / `test:ui` | Playwright |
-| `report` | open the HTML report |
-| `clean` | remove `artifacts/`, `test-results/`, `playwright-report/` |
-| `typecheck`, `format`, `format:check` | tsc / prettier |
+| Script                                | Does                                                                          |
+| ------------------------------------- | ----------------------------------------------------------------------------- |
+| `fetch` / `fetch:canary`              | download + prepare an artifact (`scripts/fetch-artifact.ts`)                  |
+| `prepare-upgrade`                     | fetch everything an upgrade-flow run needs (`--format=X`, `--scenario=id,id`) |
+| `watch-versions`                      | dry-run of the version watcher (report only)                                  |
+| `test` / `test:headed` / `test:ui`    | Playwright                                                                    |
+| `report`                              | open the HTML report                                                          |
+| `clean`                               | remove `artifacts/`, `test-results/`, `playwright-report/`                    |
+| `typecheck`, `format`, `format:check` | tsc / prettier                                                                |
 
 ## What fetch-artifact produces
 
@@ -40,7 +40,7 @@ downloads into `artifacts/downloads/`, and prepares a runnable install:
 
 - `artifacts/<version>/[<format>/]` — extracted app (Linux per-format subdirs)
   plus `meta.json` (version, channel, platform, format, executablePath, …).
-  flatpak/snap are *installed* machine-globally instead (idempotent; the
+  flatpak/snap are _installed_ machine-globally instead (idempotent; the
   ostree commit / snap version is recorded and checked).
 - `artifacts/<version>/bundle.json` — the version's published bundle, verified
   against the production public key (falls back to the channel pointer's
@@ -105,18 +105,18 @@ can't break it again.
 
 ## Key environment variables
 
-| Var | Meaning |
-| --- | --- |
-| `MIMIRI_VERSION` / `APP_FORMAT` | which artifact to run (else `artifacts/current.json`) |
-| `APP_TEST_MODE=1` | set by launchApp; enables the test seam (client ≥ 2.6.5) |
-| `MIMIRI_UPDATE_URL` / `MIMIRI_UPDATE_KEY` | update-host seams (client ≥ 2.6.9); passthrough runs pass only the URL |
-| `UPGRADE_FLOWS=1` | opt into upgrade-flow specs |
-| `MIMIRI_SCENARIO` | comma-separated scenario id filter |
-| `MIMIRI_TARGET_VERSION` / `MIMIRI_PREVIOUS_VERSION` / `MIMIRI_TARGET_BUNDLE` | version overrides for upgrade flows |
-| `MIMIRI_REAL_PROFILE=1` | allow destructive real-profile scenarios (disposable machines only) |
-| `MIMIRI_FAKE_STORE` | fake install source for store-managed update UI tests |
-| `MIMIRI_RETRIES` | overrides Playwright retries (nightly CI sets 0 to surface races) |
-| `MIMIRI_EXPECT_PORTAL=0` | relax the Linux portal-dialog assertion |
+| Var                                                                          | Meaning                                                                |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `MIMIRI_VERSION` / `APP_FORMAT`                                              | which artifact to run (else `artifacts/current.json`)                  |
+| `APP_TEST_MODE=1`                                                            | set by launchApp; enables the test seam (client ≥ 2.6.5)               |
+| `MIMIRI_UPDATE_URL` / `MIMIRI_UPDATE_KEY`                                    | update-host seams (client ≥ 2.6.9); passthrough runs pass only the URL |
+| `UPGRADE_FLOWS=1`                                                            | opt into upgrade-flow specs                                            |
+| `MIMIRI_SCENARIO`                                                            | comma-separated scenario id filter                                     |
+| `MIMIRI_TARGET_VERSION` / `MIMIRI_PREVIOUS_VERSION` / `MIMIRI_TARGET_BUNDLE` | version overrides for upgrade flows                                    |
+| `MIMIRI_REAL_PROFILE=1`                                                      | allow destructive real-profile scenarios (disposable machines only)    |
+| `MIMIRI_FAKE_STORE`                                                          | fake install source for store-managed update UI tests                  |
+| `MIMIRI_RETRIES`                                                             | overrides Playwright retries (nightly CI sets 0 to surface races)      |
+| `MIMIRI_EXPECT_PORTAL=0`                                                     | relax the Linux portal-dialog assertion                                |
 
 ## Test machines (for cross-OS work from this repo)
 

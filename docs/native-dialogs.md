@@ -32,7 +32,7 @@ D-Bus address). `isPortalDialog()` asserts the mode actually engaged
 
 Driving mechanism: GTK directory choosers are unreliable under Xvfb (the
 Ctrl+L location entry never commits). Instead, a temporary **GTK bookmark**
-(`~/.config/gtk-3.0/bookmarks`, label `MIMIRI-E2E-TARGET`) is written *before*
+(`~/.config/gtk-3.0/bookmarks`, label `MIMIRI-E2E-TARGET`) is written _before_
 the dialog opens; the driver finds the dialog window by WM_CLASS (portal) or
 title hint, clicks the bookmark in the places sidebar (fixed offset — the
 sidebar layout is identical in both modes), then clicks Select. Input is
@@ -40,7 +40,7 @@ XTEST via `xdotool`, which needs a window manager for focus.
 
 **Environment**: dialog tests only work under `scripts/run-with-dialogs.sh`,
 which builds a self-contained graphical session: Xvfb `:99`, openbox, a
-*private* D-Bus session, and its own portal pair (frontend + gtk backend),
+_private_ D-Bus session, and its own portal pair (frontend + gtk backend),
 gating readiness on both before tests start. Snap is the exception — a
 confined snap can't reach a private bus, so the wrapper uses the real user
 session bus. One-time provisioning: `scripts/setup-linux-dialogs.sh <format>`
