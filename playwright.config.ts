@@ -12,7 +12,15 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  // CI gets a retry cushion for the suite's inherent timing sensitivity
+  // (real installers, watchdogs, slow runners). MIMIRI_RETRIES overrides it:
+  // the scheduled CI run sets 0 so genuine races fail loudly there instead
+  // of hiding as retry-passes (the HTML report marks those "flaky").
+  retries: process.env.MIMIRI_RETRIES
+    ? Number(process.env.MIMIRI_RETRIES)
+    : process.env.CI
+      ? 2
+      : 0,
   timeout: 60_000,
   expect: {
     timeout: 10_000,

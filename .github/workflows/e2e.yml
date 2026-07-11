@@ -45,6 +45,9 @@ jobs:
     name: smoke (${{ matrix.os }}${{ matrix.format && format(', {0}', matrix.format) || '' }})
     env:
       APP_FORMAT: ${{ matrix.format || 'targz' }}
+      # The nightly runs without retries so timing races fail loudly on a
+      # schedule; pushes/PRs keep the retry cushion (empty string = default).
+      MIMIRI_RETRIES: ${{ github.event_name == 'schedule' && '0' || '' }}
     steps:
       - uses: actions/checkout@v7
 
