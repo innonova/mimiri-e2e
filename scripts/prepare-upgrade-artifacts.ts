@@ -156,7 +156,17 @@ async function main(): Promise<void> {
       `bundles: ${[...bundles].join(", ") || "none"}`,
   );
   for (const version of shellList) {
-    fetchArtifact(version, format);
+    try {
+      fetchArtifact(version, format);
+    } catch (err) {
+      // A version can be missing for this platform (e.g. no darwin build
+      // was ever published for 2.6.1). The runner self-skips scenarios
+      // whose artifacts are absent — don't let one gap kill the prep.
+      console.warn(
+        `[prepare-upgrade] WARNING: could not prepare ${version} — ` +
+          `dependent scenarios will self-skip (${err})`,
+      );
+    }
   }
   for (const version of bundles) {
     await fetchRealBundle(version);

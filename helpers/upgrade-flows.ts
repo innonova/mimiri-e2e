@@ -23,8 +23,17 @@ import { AppFormat } from "./format";
  * MIMIRI_UPDATE_URL is inert, the client talks to the real update host)
  * and pre user-data-dir flag (< 2.6.6), so only used for flows that need
  * no update-host control. Update the list as the population moves.
+ *
+ * Platform gates mirror what was actually published: 2.6.0/2.6.1 have no
+ * darwin build — the macOS stable channel still points at 2.5.72.
  */
-export const ANCIENT_WILD_VERSIONS = ["2.5.72", "2.6.1"];
+export const ANCIENT_WILD_VERSIONS: Array<{
+  version: string;
+  platforms?: NodeJS.Platform[];
+}> = [
+  { version: "2.5.72" },
+  { version: "2.6.1", platforms: ["linux", "win32"] },
+];
 
 export type VersionSelector =
   /** The version under validation (the newly published one). */
@@ -100,9 +109,10 @@ export const scenarios: Scenario[] = [
       { do: "verify" },
     ],
   },
-  ...ANCIENT_WILD_VERSIONS.map((version): Scenario => ({
+  ...ANCIENT_WILD_VERSIONS.map(({ version, platforms }): Scenario => ({
     id: `ancient-${version}-to-target-external`,
     title: `pre-seam ${version} (in the wild), seeded, reinstall-over to target`,
+    platforms,
     formats: ["targz"],
     steps: [
       { do: "install", version: { kind: "pin", version } },
