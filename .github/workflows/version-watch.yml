@@ -1,0 +1,51 @@
+name: version-watch
+
+# Polls update.mimiri.io for new shell/bundle publishes, maintains the
+# committed version history (state/versions.json — what makes the
+# `previous` selectors of the upgrade-flow scenarios resolvable), and
+# dispatches upgrade-validation when something changed.
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write # push the updated state file
+  actions: write # dispatch upgrade-validation
+
+concurrency: version-watch
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - id: watch
+        run: npx tsx scripts/version-watch.ts
+
+      - name: Commit updated state
+        if: steps.watch.outputs.changed == 'true'
+        run: |
+          git config user.name "version-watch[bot]"
+          git config user.email "noreply@github.com"
+          git add state/versions.json
+          git commit -m "version-watch: shell ${{ steps.watch.outputs.target_shell }}, bundle ${{ steps.watch.outputs.target_bundle }}"
+          git pull --rebase && git push
+
+      - name: Dispatch upgrade validation
+        if: steps.watch.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run upgrade-validation.yml --ref ${{ github.ref_name }} \
+            -f target=${{ steps.watch.outputs.target_shell }} \
+            -f previous=${{ steps.watch.outputs.previous_shell }} \
+            -f bundle=${{ steps.watch.outputs.target_bundle }}

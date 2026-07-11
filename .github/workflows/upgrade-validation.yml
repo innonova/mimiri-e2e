@@ -1,0 +1,90 @@
+name: upgrade-validation
+
+# Validates that a specific newly published version does not break existing
+# users: real published old version → real published new version, with user
+# state seeded on the old one (tests/upgrade-flows.spec.ts). Dispatched by
+# the version-watch workflow when a publish is detected; also callable
+# manually or by an external monitoring service. With no inputs the
+# versions come from the committed state/versions.json.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Target shell version to validate (x.y.z; default: state file)"
+        required: false
+      previous:
+        description: "Shell version users are upgrading from (x.y.z; default: state-file history)"
+        required: false
+      bundle:
+        description: "Target bundle version (x.y.z; default: state file)"
+        required: false
+      scenario:
+        description: "Scenario id filter, comma-separated (default: all)"
+        required: false
+
+jobs:
+  upgrade:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Reduced relative to the e2e matrix: no arm64 (same flows, scarcer
+        # runners) and no appimage (its bundle updater is identical to targz
+        # and its "shell update" is a reinstall-over, covered by targz).
+        include:
+          - os: windows-latest
+          - os: macos-26
+          - os: ubuntu-latest
+            format: targz
+          - os: ubuntu-latest
+            format: flatpak
+          - os: ubuntu-latest
+            format: snap
+    runs-on: ${{ matrix.os }}
+    name: upgrade (${{ matrix.os }}${{ matrix.format && format(', {0}', matrix.format) || '' }})
+    env:
+      UPGRADE_FLOWS: "1"
+      APP_FORMAT: ${{ matrix.format || 'targz' }}
+      MIMIRI_TARGET_VERSION: ${{ inputs.target }}
+      MIMIRI_PREVIOUS_VERSION: ${{ inputs.previous }}
+      MIMIRI_TARGET_BUNDLE: ${{ inputs.bundle }}
+      MIMIRI_SCENARIO: ${{ inputs.scenario }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Allow unprivileged user namespaces (Electron sandbox)
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Install native dialog stack (Linux)
+        if: runner.os == 'Linux'
+        run: bash scripts/setup-linux-dialogs.sh ${{ matrix.format || 'targz' }}
+
+      - name: Prepare artifacts (all versions the scenarios need)
+        run: npm run prepare-upgrade -- --format=${{ matrix.format || 'targz' }}
+
+      - name: Run upgrade flows (Linux)
+        if: runner.os == 'Linux'
+        # The wrapper provides the display/session the app needs; no portal
+        # dialogs are driven here.
+        run: bash scripts/run-with-dialogs.sh npx playwright test tests/upgrade-flows.spec.ts
+
+      - name: Run upgrade flows (Windows, macOS)
+        if: runner.os != 'Linux'
+        run: npx playwright test tests/upgrade-flows.spec.ts
+
+      - name: Upload report on failure
+        uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: upgrade-report-${{ matrix.os }}${{ matrix.format && format('-{0}', matrix.format) || '' }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

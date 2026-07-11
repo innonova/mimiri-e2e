@@ -143,7 +143,7 @@ export function versionAtLeast(
 }
 
 /** Native --user-data-dir support landed in the client in 2.6.6. */
-function supportsUserDataDirFlag(version: string): boolean {
+export function supportsUserDataDirFlag(version: string): boolean {
   return versionAtLeast(version, 2, 6, 6);
 }
 
@@ -200,6 +200,18 @@ export async function launchApp(
      * formats only.
      */
     executablePath?: string;
+    /**
+     * Isolate via a fake HOME instead of --user-data-dir: userDataDir acts
+     * as the home directory and no flag is passed, so data lands where a
+     * real install puts it — settings/bundles in ~/.mimiri, the Chromium
+     * profile (where the client keeps its IndexedDB note stores) under
+     * ~/.config (Linux) / ~/Library (macOS). Required when a profile must
+     * carry across shells on both sides of 2.6.6: the --user-data-dir
+     * layout and the home-derived layout are different directory shapes,
+     * and only the home-derived one exists on real user machines.
+     * Linux/macOS targz-style formats only.
+     */
+    homeIsolation?: boolean;
   } = {},
 ): Promise<AppContext> {
   const meta = loadMeta(opts.version, opts.format);
@@ -218,20 +230,28 @@ export async function launchApp(
   // The app honors `--user-data-dir` natively since 2.6.6 (applied via
   // app.setPath in main.ts). For older builds, fall back to redirecting
   // the location Electron resolves `userData` from: APPDATA (Windows),
-  // XDG_CONFIG_HOME (Linux), HOME (macOS, via ~/Library).
-  const isolationEnv: Record<string, string> = supportsUserDataDirFlag(
-    meta.version,
-  )
-    ? {}
-    : process.platform === "win32"
-      ? { APPDATA: userDataDir }
-      : process.platform === "darwin"
-        ? { HOME: userDataDir }
-        : { XDG_CONFIG_HOME: userDataDir };
+  // XDG_CONFIG_HOME (Linux), HOME (macOS, via ~/Library). With
+  // homeIsolation, redirect HOME (and the XDG dirs Electron would
+  // otherwise take from the real environment) instead, for every version.
+  const isolationEnv: Record<string, string> = opts.homeIsolation
+    ? process.platform === "darwin"
+      ? { HOME: userDataDir }
+      : {
+          HOME: userDataDir,
+          XDG_CONFIG_HOME: path.join(userDataDir, ".config"),
+          XDG_DATA_HOME: path.join(userDataDir, ".local", "share"),
+        }
+    : supportsUserDataDirFlag(meta.version)
+      ? {}
+      : process.platform === "win32"
+        ? { APPDATA: userDataDir }
+        : process.platform === "darwin"
+          ? { HOME: userDataDir }
+          : { XDG_CONFIG_HOME: userDataDir };
 
   const appArgs = [
     "--remote-debugging-port=0",
-    `--user-data-dir=${userDataDir}`,
+    ...(opts.homeIsolation ? [] : [`--user-data-dir=${userDataDir}`]),
   ];
   // An empty-string value in opts.env means "make sure this variable is NOT
   // set for the app", even if the surrounding environment exports it (e.g.
