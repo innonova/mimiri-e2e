@@ -458,3 +458,238 @@ export async function startUpdateServer(opts: {
       ),
   };
 }
+
+/** A real published shell release servable for host (shell) updates. */
+export interface PassthroughShellPackage {
+  version: string;
+  /** The real installer package: full .nupkg (win) / darwin .zip (mac). */
+  packagePath: string;
+  /** The real production-signed electron-<os>.<version>.json. */
+  infoJsonPath: string;
+}
+
+export interface PassthroughUpdateServer {
+  /** Base URL — value for MIMIRI_UPDATE_URL. Do NOT set MIMIRI_UPDATE_KEY:
+   * everything served is production-signed and must validate against the
+   * client's built-in key. */
+  url: string;
+  /** Arms the channel pointer with a REAL published version: a bundle
+   * version for the plain-bundle path, or (with `hostUpdate`) a shell
+   * version for the shell-update path. null disarms. */
+  setLatest(version: string | null, opts?: { hostUpdate?: boolean }): void;
+  requests: string[];
+  stop(): Promise<void>;
+}
+
+/**
+ * Passthrough variant of the mock update host, for the upgrade-flow suite
+ * (tests/upgrade-flows.spec.ts): where startUpdateServer serves a
+ * transformed re-signed bundle, this serves REAL published artifacts
+ * byte-for-byte — bundle jsons and shell packages keep their production
+ * signatures, so the app under test is only given MIMIRI_UPDATE_URL and
+ * validates everything against its baked-in production key, exactly like
+ * a real update. Only the unsigned metadata (channel pointer, .info.json,
+ * latest.json, changelog) is synthesized, which is what makes arming a
+ * specific version possible.
+ */
+export async function startPassthroughUpdateServer(opts: {
+  /** bundle version → path of the real production-signed bundle json. */
+  bundles?: Map<string, string>;
+  shellPackages?: PassthroughShellPackage[];
+}): Promise<PassthroughUpdateServer> {
+  interface LoadedBundle {
+    raw: string;
+    bundle: Bundle;
+  }
+  const loadedBundles = new Map<string, LoadedBundle>();
+  const loadBundle = (version: string): LoadedBundle | undefined => {
+    let loaded = loadedBundles.get(version);
+    if (!loaded) {
+      const file = opts.bundles?.get(version);
+      if (!file) {
+        return undefined;
+      }
+      const raw = fs.readFileSync(file, "utf8");
+      loaded = { raw, bundle: JSON.parse(raw) as Bundle };
+      loadedBundles.set(version, loaded);
+    }
+    return loaded;
+  };
+
+  let armedVersion: string | null = null;
+  let hostUpdateArmed = false;
+  let base = "";
+  const requests: string[] = [];
+
+  /** BundleInfo for the pointer/info routes. Falls back to synthetic
+   * fields when the armed version is a shell version with no bundle. */
+  const pointerInfo = (): Record<string, unknown> => {
+    const minVersion = hostUpdateArmed && armedVersion ? armedVersion : "0.0.0";
+    const armedBundle = armedVersion ? loadBundle(armedVersion) : undefined;
+    return {
+      ...(armedBundle
+        ? infoFor(armedBundle.bundle, armedBundle.raw.length, minVersion)
+        : {
+            description: "",
+            releaseDate: new Date().toISOString(),
+            size: 0,
+            minElectronVersion: minVersion,
+            minElectronVersionWin32: minVersion,
+            minElectronVersionDarwin: minVersion,
+            minElectronVersionLinux: minVersion,
+            minIosVersion: "0.0.0",
+            minAndroidVersion: "0.0.0",
+          }),
+      version: armedVersion ?? DISARMED_VERSION,
+    };
+  };
+
+  const server = http.createServer((req, res) => {
+    void (async () => {
+      const reqPath = decodeURIComponent((req.url ?? "").split("?")[0]);
+      requests.push(`${req.method} ${reqPath}`);
+
+      // Same CORS story as startUpdateServer: the renderer origin plus the
+      // X-Mimiri-Version header force a preflight on every request.
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      if (req.method === "OPTIONS") {
+        res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+        res.setHeader(
+          "Access-Control-Allow-Headers",
+          req.headers["access-control-request-headers"] ??
+            "X-Mimiri-Version, Content-Type",
+        );
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      const json = (body: string) => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(body);
+      };
+      const notFound = () => {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: `no route for ${reqPath}` }));
+      };
+
+      const electronInfo = reqPath.match(
+        /^\/electron-(win|darwin)\.(.+)\.json$/,
+      );
+      const shellPackage = reqPath.match(/^\/(.+\.(nupkg|zip))$/);
+      const info = reqPath.match(/^\/(.+)\.(\d+\.\d+\.\d+)\.info\.json$/);
+      const fullBundle = reqPath.match(/^\/(.+)\.(\d+\.\d+\.\d+)\.json$/);
+      const pointer = reqPath.match(/^\/(.+)\.(stable|canary)\.json$/);
+
+      if (reqPath === "/changelog.canary.json") {
+        json(JSON.stringify({ versions: [] }));
+      } else if (reqPath === "/latest.json") {
+        const systems: unknown[] = [];
+        const version = armedVersion ?? DISARMED_VERSION;
+        const linuxLinks = ["tar.gz", "AppImage", "flatpak", "snap"].map(
+          (ext) => ({
+            url: `${base}/mimiri-notes_${version}_amd64.${ext}`,
+            name: `mimiri-notes_${version}_amd64.${ext}`,
+          }),
+        );
+        systems.push({
+          name: "Linux",
+          links: linuxLinks,
+          stable: linuxLinks,
+          canary: linuxLinks,
+        });
+        const pkg = opts.shellPackages?.find((p) => p.version === version);
+        if (pkg) {
+          const os = pkg.packagePath.endsWith(".zip") ? "darwin" : "win";
+          const fileName = path.basename(pkg.packagePath);
+          const links = [
+            {
+              url: `${base}/electron-${os}.${version}.json`,
+              name: `electron-${os}.${version}.json`,
+            },
+            {
+              url: `${base}/${encodeURIComponent(fileName)}`,
+              name: fileName,
+            },
+          ];
+          systems.push(
+            { name: "Windows", links, stable: links, canary: links },
+            { name: "MacOS", links, stable: links, canary: links },
+          );
+        }
+        json(JSON.stringify({ systems }));
+      } else if (electronInfo) {
+        const pkg = opts.shellPackages?.find(
+          (p) => p.version === electronInfo[2],
+        );
+        if (!pkg) {
+          notFound();
+          return;
+        }
+        json(fs.readFileSync(pkg.infoJsonPath, "utf8"));
+      } else if (shellPackage) {
+        const pkg = opts.shellPackages?.find(
+          (p) => path.basename(p.packagePath) === shellPackage[1],
+        );
+        if (!pkg) {
+          notFound();
+          return;
+        }
+        const bytes = fs.readFileSync(pkg.packagePath);
+        res.writeHead(200, {
+          "Content-Type": "application/octet-stream",
+          "Content-Length": bytes.length,
+        });
+        res.end(bytes);
+      } else if (info) {
+        // The download step re-fetches the ARMED version's info.json and
+        // routes on its minElectronVersion (bundle vs shell installer) —
+        // serve it with the same semantics as the pointer, including for
+        // armed shell versions that have no bundle at all.
+        if (info[2] === armedVersion) {
+          json(JSON.stringify(pointerInfo()));
+          return;
+        }
+        const loaded = loadBundle(info[2]);
+        if (!loaded) {
+          notFound();
+          return;
+        }
+        json(
+          JSON.stringify(infoFor(loaded.bundle, loaded.raw.length, "0.0.0")),
+        );
+      } else if (fullBundle) {
+        const loaded = loadBundle(fullBundle[2]);
+        if (!loaded) {
+          notFound();
+          return;
+        }
+        json(loaded.raw);
+      } else if (pointer) {
+        json(JSON.stringify(pointerInfo()));
+      } else {
+        notFound();
+      }
+    })().catch((err) => {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(err) }));
+    });
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  base = `http://127.0.0.1:${port}`;
+
+  return {
+    url: base,
+    setLatest(version, setOpts) {
+      armedVersion = version;
+      hostUpdateArmed = !!version && !!setOpts?.hostUpdate;
+    },
+    requests,
+    stop: () =>
+      new Promise<void>((resolve, reject) =>
+        server.close((err) => (err ? reject(err) : resolve())),
+      ),
+  };
+}
