@@ -76,7 +76,7 @@ Three layers:
 ## Repository layout
 
 ```
-tests/            13 spec files (see test-catalog.md)
+tests/            14 spec files (see test-catalog.md)
 helpers/          launcher, UI drivers, mock update server, dialog drivers,
                   Squirrel helpers, upgrade-flow scenario model
 scripts/          fetch-artifact, prepare-upgrade-artifacts, version-watch,

@@ -2,8 +2,9 @@
 
 All specs run **serially** (`workers: 1`, `fullyParallel: false`) — the app is a
 single-instance desktop process. Global timeout is 60 s, but heavy specs raise
-their own (up to 900 s). CI retries twice; traces/screenshots/videos are kept on
-failure.
+their own (up to 900 s). CI retries twice — except the nightly scheduled run,
+which sets `MIMIRI_RETRIES=0` so timing races fail loudly there instead of
+hiding as retry-passes. Traces/screenshots/videos are kept on failure.
 
 Most specs share one skeleton: `loadMeta()` → skip if the build lacks the needed
 capability → maybe `startUpdateServer` → `launchApp` → `enterLocalMode` → drive
@@ -20,11 +21,12 @@ install dirs, process lists).
 | [update-repair](../tests/update-repair.spec.ts) | app bricked by half-written bundle | linux, win, mac | client ≥ 2.6.12 |
 | [update-stale-bundle](../tests/update-stale-bundle.spec.ts) | shell update reviving an ancient active bundle | all | client ≥ 2.6.5 |
 | [update-store-managed](../tests/update-store-managed.spec.ts) | wrong host-update UI per install source | linux only | client ≥ 2.6.13, bundle ≥ 2.6.7 |
-| [update-shell-win](../tests/update-shell-win.spec.ts) | broken Squirrel.Windows shell update | win only | Setup.exe + nupkg fetched |
+| [update-shell-win](../tests/update-shell-win.spec.ts) | broken Squirrel.Windows shell update | win only | Setup.exe + nupkg fetched (base 2.6.9 for the real-release flow) |
 | [update-shell-mac](../tests/update-shell-mac.spec.ts) | broken Squirrel.Mac / ShipIt shell update | mac only | two real signed releases |
 | [update-shell-external](../tests/update-shell-external.spec.ts) | website-download install-over losing data/bundle | linux, mac, win (targz) | base 2.6.9 archive |
 | [update-shell-pkgmgr](../tests/update-shell-pkgmgr.spec.ts) | flatpak/snap upgrade losing data/bundle | linux (flatpak, snap) | base 2.6.9 package |
 | [mac-signing](../tests/mac-signing.spec.ts) | unsigned / un-notarized .app bricking downloads | mac only | fetched .app |
+| [win-signing](../tests/win-signing.spec.ts) | unsigned Setup.exe tripping SmartScreen | win only | fetched Setup.exe |
 | [export-import](../tests/export-import.spec.ts) | broken real native file dialogs | all (with dialog env) | see [native-dialogs.md](native-dialogs.md) |
 | [upgrade-flows](../tests/upgrade-flows.spec.ts) | new release breaking **existing users** | all | `UPGRADE_FLOWS=1`, see [upgrade-flows.md](upgrade-flows.md) |
 
@@ -71,11 +73,16 @@ show a manual download link with the right per-format filename. Never any
 `update-download-button` for host updates.
 
 ### update-shell-win.spec.ts
-Real Squirrel.Windows shell update: installs the published `Setup.exe` into
-`%LOCALAPPDATA%\mimiri_notes`, serves a **repacked** nupkg (same binaries,
-nuspec version bumped to 99.0.0 — Squirrel only trusts the RELEASES SHA1),
-drives check → download → restart, then asserts `Update.exe` swapped to
-`app-99.0.0` and relaunched. Machine-global; uninstalls afterwards.
+Real Squirrel.Windows shell update between two real releases: installs the
+pinned base 2.6.9 via its published `Setup.exe` into
+`%LOCALAPPDATA%\mimiri_notes`, serves the fetched artifact's **own real
+nupkg** (Squirrel only trusts the RELEASES SHA1, so it serves as-is), drives
+check → download → restart, asserts `Update.exe` swapped to the new
+`app-<version>`, then relaunches the updated install attached and asserts it
+reports the new version and reaches a working UI — so the updated *binary* is
+proven, not just the swap. When the fetched artifact *is* the base, it falls
+back to a **repacked** nupkg (same binaries, nuspec bumped to 99.0.0) to still
+exercise the mechanism. Machine-global; uninstalls afterwards.
 
 ### update-shell-mac.spec.ts
 Real Squirrel.Mac / ShipIt shell update. macOS **cannot** use the repack trick —
@@ -102,6 +109,15 @@ and `xcrun stapler validate` against the fetched `.app`. This is the piece the
 upgrade harness can't cover (its downloads carry no quarantine xattr) — a
 broken signature would brick real browser downloads while everything else
 stayed green.
+
+### win-signing.spec.ts
+The Windows counterpart of mac-signing, also without launching the app:
+`Get-AuthenticodeSignature` on the fetched `Setup.exe` must report a valid,
+timestamped signature from `CN=innonova GmbH`. Nothing else in the suite
+would notice a broken signature (Squirrel validates only the RELEASES SHA1),
+but SmartScreen/Defender treat unsigned installer downloads very differently.
+Deliberately limited to `Setup.exe`: the binaries inside the nupkg (app exe,
+execution stub, `squirrel.exe`) have always shipped unsigned.
 
 ### export-import.spec.ts
 Export and import through **real** native file dialogs, per OS, plus a

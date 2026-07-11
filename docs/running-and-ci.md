@@ -82,7 +82,9 @@ flowchart TD
 - **e2e.yml** — the everyday suite. Matrix: windows-latest, macos-26,
   ubuntu-latest and ubuntu-24.04-arm each × {targz, flatpak, appimage, snap}.
   Linux legs apply the userns sysctl, run `setup-linux-dialogs.sh`, and wrap
-  the test run in `run-with-dialogs.sh`. Channel defaults to canary.
+  the test run in `run-with-dialogs.sh`. Channel defaults to canary. The
+  nightly schedule runs with retries disabled (`MIMIRI_RETRIES=0`) so timing
+  races surface there instead of being absorbed as retry-passes.
 - **version-watch.yml** — polls the update host every 30 minutes, appends new
   versions to the per-channel history in `state/versions.json` (newest-first,
   capped at 20), commits as `version-watch[bot]`, and dispatches
@@ -108,6 +110,7 @@ Manual dispatch: `gh workflow run e2e --ref <branch>`.
 | `MIMIRI_TARGET_VERSION` / `MIMIRI_PREVIOUS_VERSION` / `MIMIRI_TARGET_BUNDLE` | version overrides for upgrade flows |
 | `MIMIRI_REAL_PROFILE=1` | allow destructive real-profile scenarios (disposable machines only) |
 | `MIMIRI_FAKE_STORE` | fake install source for store-managed update UI tests |
+| `MIMIRI_RETRIES` | overrides Playwright retries (nightly CI sets 0 to surface races) |
 | `MIMIRI_EXPECT_PORTAL=0` | relax the Linux portal-dialog assertion |
 
 ## Test machines (for cross-OS work from this repo)
