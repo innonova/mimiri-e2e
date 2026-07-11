@@ -25,6 +25,13 @@ export interface AppContext {
   format: AppFormat;
 }
 
+/**
+ * The release shell-upgrade tests start from: the first with the
+ * MIMIRI_UPDATE_URL/MIMIRI_UPDATE_KEY seams. Kept downloadable forever on
+ * the update host, so the tests work regardless of the current version.
+ */
+export const SHELL_UPGRADE_BASE_VERSION = "2.6.9";
+
 /** Injected by the app (2.6.5+) when launched with APP_TEST_MODE=1. */
 export interface MimiriTestInfo {
   version: string;
@@ -122,7 +129,7 @@ export function loadMeta(version?: string, format?: string): ArtifactMeta {
 }
 
 /** Whether `version` is at least maj.min.pat. */
-function versionAtLeast(
+export function versionAtLeast(
   version: string,
   maj: number,
   min: number,
@@ -157,6 +164,15 @@ export function supportsUpdateSeams(version: string): boolean {
  */
 export function supportsBundleRepair(version: string): boolean {
   return versionAtLeast(version, 2, 6, 12);
+}
+
+/**
+ * Flathub/snap-store detection (and the MIMIRI_FAKE_STORE test seam)
+ * landed in the shell in 2.6.13; the store-managed update UI needs a
+ * bundle >= 2.6.7 (testids + the store-managed check() branch).
+ */
+export function supportsStoreDetection(version: string): boolean {
+  return versionAtLeast(version, 2, 6, 13);
 }
 
 /**
@@ -395,8 +411,15 @@ function killAppProcess(child: ChildProcess, format: AppFormat): void {
   }
 }
 
-/** Closes the app and removes its temp user data dir. */
-export async function cleanup(ctx: AppContext | undefined): Promise<void> {
+/**
+ * Closes the app and removes its temp user data dir. Pass
+ * `keepUserData: true` for multi-launch flows (e.g. shell-upgrade tests)
+ * that relaunch against the same profile.
+ */
+export async function cleanup(
+  ctx: AppContext | undefined,
+  opts: { keepUserData?: boolean } = {},
+): Promise<void> {
   if (!ctx) {
     return;
   }
@@ -415,10 +438,12 @@ export async function cleanup(ctx: AppContext | undefined): Promise<void> {
   });
   killAppProcess(ctx.process, ctx.format);
   await exited;
-  fs.rmSync(ctx.userDataDir, {
-    recursive: true,
-    force: true,
-    maxRetries: 10, // Windows can hold file locks briefly after exit
-    retryDelay: 200,
-  });
+  if (!opts.keepUserData) {
+    fs.rmSync(ctx.userDataDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10, // Windows can hold file locks briefly after exit
+      retryDelay: 200,
+    });
+  }
 }

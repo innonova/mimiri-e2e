@@ -1,6 +1,7 @@
 import { spawnSync } from "child_process";
 import fs from "fs";
 import path from "path";
+import { SHELL_UPGRADE_BASE_VERSION } from "./app";
 
 /**
  * Helpers for the macOS shell (Squirrel.Mac) update test. Unlike Windows,
@@ -11,12 +12,8 @@ import path from "path";
  * to the fetched artifact's version.
  */
 
-/**
- * The release the mac shell-update test starts from — the first with the
- * MIMIRI_UPDATE_URL/MIMIRI_UPDATE_KEY seams. Kept downloadable forever on
- * the update host, so the test works regardless of the current version.
- */
-export const MAC_SHELL_BASE_VERSION = "2.6.9";
+/** @deprecated shared pin — see SHELL_UPGRADE_BASE_VERSION in app.ts. */
+export const MAC_SHELL_BASE_VERSION = SHELL_UPGRADE_BASE_VERSION;
 
 export const MAC_APP_BUNDLE = "Mimiri Notes.app";
 

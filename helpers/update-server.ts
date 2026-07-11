@@ -345,29 +345,44 @@ export async function startUpdateServer(opts: {
         json(JSON.stringify({ versions }));
       } else if (reqPath === "/latest.json") {
         if (hostUpdateArmed && armedVersion) {
-          // The client resolves the shell installer through the download
-          // feed: it takes the last path segment of the platform's .json
-          // and installer links and fetches them from its own update host.
-          const fixture = await shellFixture();
-          const os = fixture.fileName.endsWith(".zip") ? "darwin" : "win";
-          const links = [
-            {
-              url: `${base}/electron-${os}.${armedVersion}.json`,
-              name: `electron-${os}.${armedVersion}.json`,
-            },
-            {
-              url: `${base}/${encodeURIComponent(fixture.fileName)}`,
-              name: fixture.fileName,
-            },
-          ];
-          json(
-            JSON.stringify({
-              systems: [
-                { name: "Windows", links, stable: links, canary: links },
-                { name: "MacOS", links, stable: links, canary: links },
-              ],
+          const systems: unknown[] = [];
+          // Linux clients only ever read direct-download links (hrefs shown
+          // in the UI, never fetched by the updater) — synthesize them so
+          // the non-store host-update path has something to display.
+          const linuxLinks = ["tar.gz", "AppImage", "flatpak", "snap"].map(
+            (ext) => ({
+              url: `${base}/mimiri-notes_${armedVersion}_amd64.${ext}`,
+              name: `mimiri-notes_${armedVersion}_amd64.${ext}`,
             }),
           );
+          systems.push({
+            name: "Linux",
+            links: linuxLinks,
+            stable: linuxLinks,
+            canary: linuxLinks,
+          });
+          if (opts.shellPackagePath) {
+            // The client resolves the shell installer through the download
+            // feed: it takes the last path segment of the platform's .json
+            // and installer links and fetches them from its own update host.
+            const fixture = await shellFixture();
+            const os = fixture.fileName.endsWith(".zip") ? "darwin" : "win";
+            const links = [
+              {
+                url: `${base}/electron-${os}.${armedVersion}.json`,
+                name: `electron-${os}.${armedVersion}.json`,
+              },
+              {
+                url: `${base}/${encodeURIComponent(fixture.fileName)}`,
+                name: fixture.fileName,
+              },
+            ];
+            systems.push(
+              { name: "Windows", links, stable: links, canary: links },
+              { name: "MacOS", links, stable: links, canary: links },
+            );
+          }
+          json(JSON.stringify({ systems }));
         } else {
           // Only reached if the host-update branch is hit unexpectedly;
           // serving the committed feed copy keeps that failure diagnosable
@@ -403,12 +418,16 @@ export async function startUpdateServer(opts: {
         json(await signedBundle(fullBundle[1]));
       } else if (pointer) {
         const body = await signedBundle(pointer[1]);
-        const pointerInfo = armedVersion
-          ? infoFor(bundle, body.length, minVersion())
-          : {
-              ...infoFor(bundle, body.length, "0.0.0"),
-              version: DISARMED_VERSION,
-            };
+        // The armed version may exceed the transformed bundle's own (e.g.
+        // offering a host update on top of an already-applied 99.0.0).
+        const pointerInfo = {
+          ...infoFor(
+            bundle,
+            body.length,
+            armedVersion ? minVersion() : "0.0.0",
+          ),
+          version: armedVersion ?? DISARMED_VERSION,
+        };
         json(JSON.stringify(pointerInfo));
       } else {
         res.writeHead(404, { "Content-Type": "application/json" });
