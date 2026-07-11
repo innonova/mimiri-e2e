@@ -17,11 +17,14 @@ import { AppFormat } from "./format";
  * requires no edits here.
  */
 
-/** Oldest release the external-reinstall flows start from. Pre-seam
- * (< 2.6.9: MIMIRI_UPDATE_URL is inert, the client talks to the real
- * update host) and pre user-data-dir flag (< 2.6.6), so it is only used
- * for flows that need no update-host control. */
-export const ANCIENT_BASE_VERSION = "2.6.1";
+/**
+ * Old releases actually still IN THE WILD (per install telemetry) that the
+ * external-reinstall flows start from. Pre-seam (< 2.6.9:
+ * MIMIRI_UPDATE_URL is inert, the client talks to the real update host)
+ * and pre user-data-dir flag (< 2.6.6), so only used for flows that need
+ * no update-host control. Update the list as the population moves.
+ */
+export const ANCIENT_WILD_VERSIONS = ["2.5.72", "2.6.1"];
 
 export type VersionSelector =
   /** The version under validation (the newly published one). */
@@ -31,8 +34,6 @@ export type VersionSelector =
   | { kind: "previous" }
   /** The current stable shell — users on the slow channel. */
   | { kind: "stable" }
-  /** ANCIENT_BASE_VERSION. */
-  | { kind: "ancient" }
   /** The newest published bundle for the channel. */
   | { kind: "bundle-latest" }
   /** The bundle the channel pointed at before bundle-latest. */
@@ -99,20 +100,18 @@ export const scenarios: Scenario[] = [
       { do: "verify" },
     ],
   },
-  {
-    id: "ancient-to-target-external",
-    title: "pre-seam ancient release, seeded, reinstall-over to target",
-    // Windows pending an APPDATA profile-continuity probe for pre-2.6.6.
-    platforms: ["linux", "darwin"],
+  ...ANCIENT_WILD_VERSIONS.map((version): Scenario => ({
+    id: `ancient-${version}-to-target-external`,
+    title: `pre-seam ${version} (in the wild), seeded, reinstall-over to target`,
     formats: ["targz"],
     steps: [
-      { do: "install", version: { kind: "ancient" } },
+      { do: "install", version: { kind: "pin", version } },
       { do: "seed-state" },
       { do: "verify" },
       { do: "update-shell", to: { kind: "target" }, via: "external" },
       { do: "verify" },
     ],
-  },
+  })),
   {
     id: "previous-to-target-squirrel",
     title: "previous release, seeded, in-app shell update to target",
@@ -196,7 +195,6 @@ export interface ResolvedVersions {
   target?: string;
   previous?: string;
   stable?: string;
-  ancient: string;
   bundleLatest?: string;
   bundlePrevious?: string;
 }
@@ -224,7 +222,6 @@ export function resolveVersions(): ResolvedVersions {
     target,
     previous: process.env.MIMIRI_PREVIOUS_VERSION || previousIn(shell),
     stable: state?.shell.stable.current,
-    ancient: ANCIENT_BASE_VERSION,
     bundleLatest,
     bundlePrevious:
       bundle && bundleLatest
@@ -245,8 +242,6 @@ export function resolveSelector(
       return rv.previous;
     case "stable":
       return rv.stable;
-    case "ancient":
-      return rv.ancient;
     case "bundle-latest":
       return rv.bundleLatest;
     case "bundle-previous":
@@ -278,15 +273,16 @@ export function needsHomeLayout(shells: string[]): boolean {
 }
 
 /**
- * Where the home layout works: not on Windows (pre-2.6.6 profile
- * continuity there is unprobed — USERPROFILE-derived paths, bundles next
- * to the install) and not under flatpak/snap confinement.
+ * Where the home layout works: targz-style formats only — flatpak/snap
+ * confinement has its own directory layout. On Windows launchApp
+ * redirects USERPROFILE (→ ~/.mimiri) and APPDATA (→ the Chromium
+ * profile).
  */
 export function homeLayoutAvailable(
   platform: NodeJS.Platform,
   format: AppFormat,
 ): boolean {
-  return platform !== "win32" && format !== "flatpak" && format !== "snap";
+  return format !== "flatpak" && format !== "snap";
 }
 
 /**

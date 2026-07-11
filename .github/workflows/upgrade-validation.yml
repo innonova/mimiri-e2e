@@ -48,6 +48,10 @@ jobs:
       MIMIRI_PREVIOUS_VERSION: ${{ inputs.previous }}
       MIMIRI_TARGET_BUNDLE: ${{ inputs.bundle }}
       MIMIRI_SCENARIO: ${{ inputs.scenario }}
+      # Pre-2.6.6 Windows chains run against (and wipe) the runner's real
+      # user profile — fine on ephemeral CI runners. Only consulted on
+      # Windows.
+      MIMIRI_REAL_PROFILE: "1"
     steps:
       - uses: actions/checkout@v7
 

@@ -205,11 +205,12 @@ export async function launchApp(
      * as the home directory and no flag is passed, so data lands where a
      * real install puts it — settings/bundles in ~/.mimiri, the Chromium
      * profile (where the client keeps its IndexedDB note stores) under
-     * ~/.config (Linux) / ~/Library (macOS). Required when a profile must
-     * carry across shells on both sides of 2.6.6: the --user-data-dir
-     * layout and the home-derived layout are different directory shapes,
-     * and only the home-derived one exists on real user machines.
-     * Linux/macOS targz-style formats only.
+     * ~/.config (Linux) / ~/Library (macOS) / %APPDATA% (Windows, via a
+     * USERPROFILE+APPDATA redirect). Required when a profile must carry
+     * across shells on both sides of 2.6.6: the --user-data-dir layout
+     * and the home-derived layout are different directory shapes, and
+     * only the home-derived one exists on real user machines. targz-style
+     * formats only (flatpak/snap confinement has its own layout).
      */
     homeIsolation?: boolean;
   } = {},
@@ -233,21 +234,44 @@ export async function launchApp(
   // XDG_CONFIG_HOME (Linux), HOME (macOS, via ~/Library). With
   // homeIsolation, redirect HOME (and the XDG dirs Electron would
   // otherwise take from the real environment) instead, for every version.
-  const isolationEnv: Record<string, string> = opts.homeIsolation
-    ? process.platform === "darwin"
-      ? { HOME: userDataDir }
-      : {
-          HOME: userDataDir,
-          XDG_CONFIG_HOME: path.join(userDataDir, ".config"),
-          XDG_DATA_HOME: path.join(userDataDir, ".local", "share"),
-        }
-    : supportsUserDataDirFlag(meta.version)
+  let isolationEnv: Record<string, string>;
+  if (opts.homeIsolation) {
+    if (process.platform === "darwin") {
+      isolationEnv = { HOME: userDataDir };
+    } else if (process.platform === "win32") {
+      // Windows has NO working env-based home isolation: Electron
+      // resolves home (→ ~/.mimiri) and appData through Windows APIs
+      // that ignore USERPROFILE/APPDATA overrides, splitting state
+      // between the fake and the real profile (and an APPDATA override
+      // exits the app code 1; a fake USERPROFILE without AppData\Roaming
+      // hard-crashes it 0x80000003 — both without any output). Callers
+      // must pass the REAL home as userDataDir (real-profile mode, see
+      // tests/upgrade-flows.spec.ts) — this branch then only drops the
+      // --user-data-dir flag so the app uses its natural profile paths.
+      if (path.resolve(userDataDir) !== path.resolve(os.homedir())) {
+        throw new Error(
+          "homeIsolation on Windows only works against the real profile — " +
+            "pass userDataDir: os.homedir() (and wipe the app state " +
+            "around the run)",
+        );
+      }
+      isolationEnv = {};
+    } else {
+      isolationEnv = {
+        HOME: userDataDir,
+        XDG_CONFIG_HOME: path.join(userDataDir, ".config"),
+        XDG_DATA_HOME: path.join(userDataDir, ".local", "share"),
+      };
+    }
+  } else {
+    isolationEnv = supportsUserDataDirFlag(meta.version)
       ? {}
       : process.platform === "win32"
         ? { APPDATA: userDataDir }
         : process.platform === "darwin"
           ? { HOME: userDataDir }
           : { XDG_CONFIG_HOME: userDataDir };
+  }
 
   const appArgs = [
     "--remote-debugging-port=0",
