@@ -13,16 +13,16 @@ main-process access from tests — no dialog stubbing, no Electron API calls. Se
 
 ## Where to go
 
-| Page | What it covers |
-| --- | --- |
-| [architecture.md](architecture.md) | How the app is launched and attached, helper layering, profile isolation per platform |
-| [test-catalog.md](test-catalog.md) | Every spec file: what it protects against, how it's gated, what it does |
-| [update-testing.md](update-testing.md) | The mock update server, bundle vs. shell updates, signing, the rename cascade |
-| [upgrade-flows.md](upgrade-flows.md) | The release-validation matrix: real old version → real new version with seeded user state |
-| [native-dialogs.md](native-dialogs.md) | Driving real file dialogs on Linux (xdotool), macOS (System Events), Windows (UIA) |
-| [running-and-ci.md](running-and-ci.md) | Running locally, env vars, npm scripts, the three GitHub workflows and how they chain |
-| [testing-unreleased-changes.md](testing-unreleased-changes.md) | Sibling-repo release mechanics and recipes for e2e-testing client/shell changes pre-release |
-| [backlog.md](backlog.md) | Open improvement items from the fit-for-purpose review: coverage gaps, hardening, recurring upkeep |
+| Page                                                           | What it covers                                                                                     |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| [architecture.md](architecture.md)                             | How the app is launched and attached, helper layering, profile isolation per platform              |
+| [test-catalog.md](test-catalog.md)                             | Every spec file: what it protects against, how it's gated, what it does                            |
+| [update-testing.md](update-testing.md)                         | The mock update server, bundle vs. shell updates, signing, the rename cascade                      |
+| [upgrade-flows.md](upgrade-flows.md)                           | The release-validation matrix: real old version → real new version with seeded user state          |
+| [native-dialogs.md](native-dialogs.md)                         | Driving real file dialogs on Linux (xdotool), macOS (System Events), Windows (UIA)                 |
+| [running-and-ci.md](running-and-ci.md)                         | Running locally, env vars, npm scripts, the three GitHub workflows and how they chain              |
+| [testing-unreleased-changes.md](testing-unreleased-changes.md) | Sibling-repo release mechanics and recipes for e2e-testing client/shell changes pre-release        |
+| [backlog.md](backlog.md)                                       | Open improvement items from the fit-for-purpose review: coverage gaps, hardening, recurring upkeep |
 
 ## The big picture
 
@@ -91,11 +91,11 @@ artifacts/        (gitignored) downloaded + extracted builds, bundle fixtures
 ## The two test families
 
 - **Update mechanics** (`tests/update*.spec.ts`, smoke, signing, dialogs) — does
-  the *fetched* build work: launch, render, update itself (bundle and shell),
+  the _fetched_ build work: launch, render, update itself (bundle and shell),
   recover from broken state, drive native dialogs. Runs on every CI push/PR and
   nightly against canary.
 - **Upgrade flows** (`tests/upgrade-flows.spec.ts`, opt-in via `UPGRADE_FLOWS=1`)
-  — does a *newly published* version break **existing users**: install a real old
+  — does a _newly published_ version break **existing users**: install a real old
   release, seed notes/settings through the UI, upgrade to the new release along
   every real-world path (reinstall-over, Squirrel, package manager, bundle
   chain), and verify the state survived. Dispatched automatically by
