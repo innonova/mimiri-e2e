@@ -418,12 +418,16 @@ export async function startUpdateServer(opts: {
         json(await signedBundle(fullBundle[1]));
       } else if (pointer) {
         const body = await signedBundle(pointer[1]);
-        const pointerInfo = armedVersion
-          ? infoFor(bundle, body.length, minVersion())
-          : {
-              ...infoFor(bundle, body.length, "0.0.0"),
-              version: DISARMED_VERSION,
-            };
+        // The armed version may exceed the transformed bundle's own (e.g.
+        // offering a host update on top of an already-applied 99.0.0).
+        const pointerInfo = {
+          ...infoFor(
+            bundle,
+            body.length,
+            armedVersion ? minVersion() : "0.0.0",
+          ),
+          version: armedVersion ?? DISARMED_VERSION,
+        };
         json(JSON.stringify(pointerInfo));
       } else {
         res.writeHead(404, { "Content-Type": "application/json" });
