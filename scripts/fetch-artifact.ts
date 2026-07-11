@@ -389,7 +389,11 @@ async function fetchBundleJson(
   }
   let res = await fetch(`${UPDATE_HOST}/${UPDATE_KEY_NAME}.${version}.json`);
   if (res.status === 404) {
-    const pointerChannel = channel === "canary" ? "canary" : "stable";
+    // Prefer the canary pointer for explicit versions too: the stable
+    // bundle can lag by an era (2.5.110 while canary is 2.6.x) and the
+    // update specs need the modern update-page testids in whatever
+    // bundle they re-version.
+    const pointerChannel = channel === "stable" ? "stable" : "canary";
     const pointer = await fetch(
       `${UPDATE_HOST}/${UPDATE_KEY_NAME}.${pointerChannel}.json`,
     );
