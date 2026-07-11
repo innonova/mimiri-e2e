@@ -98,6 +98,11 @@ flowchart TD
 
 Manual dispatch: `gh workflow run e2e --ref <branch>`.
 
+Shell scripts need their executable bit **committed**
+(`git update-index --chmod=+x`) or they break on CI checkouts;
+`run-with-dialogs.sh` also re-execs itself via `bash "$0"` so a missing bit
+can't break it again.
+
 ## Key environment variables
 
 | Var | Meaning |

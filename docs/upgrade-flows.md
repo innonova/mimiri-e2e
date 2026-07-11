@@ -107,6 +107,25 @@ installs of old versions pre-seed what a real existing user's profile contains:
 
 (`preSeedPreSeamProfile` in `helpers/user-state.ts`.)
 
+More generally, pre-seeding `<dataDir>/settings.config` before launch is the
+way to steer a real (seam-less) client in a probe — e.g.
+`{"channel":"canary"}` switches the bundle channel; old shells then run their
+normal update flow against the production host, since `APP_TEST_MODE` is
+inert before 2.6.5.
+
+## Seeding and selector notes (old clients)
+
+Hard-won details behind `seedUserState`/`verifyUserState`:
+
+- Tree expansion may or may not survive a relaunch (it races the exit), so
+  verification re-expands ancestors itself. Double-clicking a node row
+  toggles expansion (`TreeNode.vue`); node testids are `node-<guid>`, so
+  target rows via `getByTitle` instead.
+- The persisted-setting seed is **dark mode via the View menu**
+  (`menu-dark-mode` → `theme` in `settings.config`) — it works back to
+  2.6.1. The `editor-toggle-wordwrap` button did NOT reliably persist on
+  2.6.1; don't use it as a seed.
+
 ## Running it locally
 
 ```sh
