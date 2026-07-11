@@ -11,8 +11,16 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
       round-trip, account deletion) against dev-api. No credentials story
       needed — accounts are random per run and deleted through the UI.
       Requires the `MIMIRI_USE_DEV_API` shell seam (client PR #46 /
-      electron PR #15); self-skips until a shell > 2.6.13 ships with it —
-      watch for the skip disappearing in the CI summary.
+      electron PR #15), shipped in shell 2.6.14 — but the seam also needs
+      the **dev host/key baked into the bundle at build time**, and the
+      release build's `.env` doesn't have them yet: 2.6.14's bundle bakes
+      `VITE_MIMER_DEV_API_HOST=https://app-dev-aek.mimiri.io` (stale) and
+      no `VITE_DEV_API_PUBLIC_KEY(_ID)` at all. The spec skips with an
+      explanatory reason until a bundle ships with
+      `VITE_MIMER_DEV_API_HOST=https://dev-api.mimiri.io/api` +
+      `VITE_DEV_API_PUBLIC_KEY(_ID)` (values in `.env.example`) in the
+      build environment — watch for the skip disappearing in the CI
+      summary.
 - [ ] **Sign the binaries inside the nupkg** _(mimiri-client-electron /
       build pipeline, not this repo)_ — only `Setup.exe` carries the
       innonova GmbH Authenticode signature. The app exe,
@@ -20,13 +28,14 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
       installed `Update.exe`) ship unsigned, verified back to 2.5.72. Signing
       them reduces AV/firewall friction for the _installed_ app. When fixed,
       extend `tests/win-signing.spec.ts` — a comment there marks the spot.
-      Note: the mimiri-client-electron checkout contains **no** Authenticode
-      step at all (no signtool/`signWithParams`/CI), so `Setup.exe` must be
-      signed somewhere outside the repo — find that step first. The canonical
-      fix is `signWithParams` on maker-squirrel (electron-winstaller then
-      signs every PE before packing), and it must run **before**
-      `rename-packages.mjs` computes the update-manifest signature over the
-      final nupkg bytes.
+      How signing works today: on the build server, a **manual** signtool
+      step that prompts for the PIN of a hardware signing key — which is why
+      no signing appears in the repo. The canonical fix is `signWithParams`
+      on maker-squirrel (electron-winstaller then signs every PE before
+      packing); with the hardware token that means one PIN prompt per file
+      during `npm run make` unless the token's PIN caching is enabled. It
+      must run **before** `rename-packages.mjs` computes the update-manifest
+      signature over the final nupkg bytes.
 - [ ] **Confirm `bundle-chain` comes alive** — the scenario self-skips while
       the target shell's embedded base bundle is < 2.6.9. The base bundle
       version is only observable at runtime, so the smoke test annotates it
