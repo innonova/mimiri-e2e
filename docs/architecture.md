@@ -72,6 +72,8 @@ Per-platform reality:
 - **Windows** — no env-based home isolation: Electron resolves home/appData
   through Win32 APIs that ignore `USERPROFILE`/`APPDATA` overrides (state
   splits between fake and real profile, or the app crashes silently).
+  Pre-2.6.6 shells on Windows also keep downloaded bundles **next to the
+  install** (`resources\bundles`), not in the profile.
 - **macOS** — no env-based home isolation either: the app's "Mimiri Notes Key"
   lives in the per-user **login keychain**, which securityd resolves
   independently of `$HOME`; a fake HOME wedges boot on a "Keychain Not Found"
