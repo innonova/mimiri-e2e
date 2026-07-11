@@ -30,8 +30,19 @@ function authenticode(file: string): AuthenticodeInfo {
     `[pscustomobject]@{ Status = $s.Status.ToString(); ` +
     `Subject = if ($s.SignerCertificate) { $s.SignerCertificate.Subject } else { '' }; ` +
     `Timestamped = $null -ne $s.TimeStamperCertificate } | ConvertTo-Json`;
+  // CI runners export a PowerShell-7 PSModulePath; Windows PowerShell 5.1
+  // then autoloads the Core build of Microsoft.PowerShell.Security and dies
+  // with CouldNotAutoloadMatchingModule. Drop the variable so 5.1 rebuilds
+  // its own default module path.
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (key.toLowerCase() === "psmodulepath") {
+      delete env[key];
+    }
+  }
   const r = spawnSync("powershell", ["-NoProfile", "-Command", script], {
     encoding: "utf8",
+    env,
   });
   if (r.status !== 0) {
     throw new Error(`Get-AuthenticodeSignature failed: ${r.stderr}`);
