@@ -47,6 +47,10 @@ export interface MimiriTestInfo {
   updateUrl?: string;
   /** Echo of MIMIRI_UPDATE_KEY (test signing key override, 2.6.9+ seams). */
   updateKey?: string;
+  /** Echo of MIMIRI_API_URL (backend override, 2.6.9+ seams). */
+  apiUrl?: string;
+  /** Echo of MIMIRI_USE_DEV_API (baked-in dev host+key toggle, post-2.6.13). */
+  useDevApi?: boolean;
 }
 
 /**

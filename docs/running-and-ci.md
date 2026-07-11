@@ -121,6 +121,8 @@ can't break it again.
 | `MIMIRI_TARGET_VERSION` / `MIMIRI_PREVIOUS_VERSION` / `MIMIRI_TARGET_BUNDLE` | version overrides for upgrade flows                                    |
 | `MIMIRI_REAL_PROFILE=1`                                                      | allow destructive real-profile scenarios (disposable machines only)    |
 | `MIMIRI_FAKE_STORE`                                                          | fake install source for store-managed update UI tests                  |
+| `MIMIRI_USE_DEV_API=1`                                                       | app uses its compiled-in dev API host + key pair (shell > 2.6.13)      |
+| `MIMIRI_STAGING_API_URL`                                                     | expected dev host for staging-sync's network assert                    |
 | `MIMIRI_RETRIES`                                                             | overrides Playwright retries (nightly CI sets 0 to surface races)      |
 | `MIMIRI_EXPECT_PORTAL=0`                                                     | relax the Linux portal-dialog assertion                                |
 

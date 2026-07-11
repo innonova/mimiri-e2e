@@ -6,11 +6,13 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
 
 ## Coverage gaps
 
-- [ ] **Staging-sync smoke test** — the core product loop (account creation,
-      encryption key handling, server sync) is never exercised against a
-      published build: every spec runs `enterLocalMode`. Needs a test/staging
-      backend and a credentials story for CI. The largest remaining
-      "works in dev, broken in the shipped build" surface.
+- [x] **Staging-sync smoke test** — done: `tests/staging-sync.spec.ts` runs
+      the full loop (account creation with real PoW, sync, fresh-profile
+      round-trip, account deletion) against dev-api. No credentials story
+      needed — accounts are random per run and deleted through the UI.
+      Requires the `MIMIRI_USE_DEV_API` shell seam (client PR #46 /
+      electron PR #15); self-skips until a shell > 2.6.13 ships with it —
+      watch for the skip disappearing in the CI summary.
 - [ ] **Sign the binaries inside the nupkg** _(mimiri-client-electron /
       build pipeline, not this repo)_ — only `Setup.exe` carries the
       innonova GmbH Authenticode signature. The app exe,
@@ -18,6 +20,13 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
       installed `Update.exe`) ship unsigned, verified back to 2.5.72. Signing
       them reduces AV/firewall friction for the _installed_ app. When fixed,
       extend `tests/win-signing.spec.ts` — a comment there marks the spot.
+      Note: the mimiri-client-electron checkout contains **no** Authenticode
+      step at all (no signtool/`signWithParams`/CI), so `Setup.exe` must be
+      signed somewhere outside the repo — find that step first. The canonical
+      fix is `signWithParams` on maker-squirrel (electron-winstaller then
+      signs every PE before packing), and it must run **before**
+      `rename-packages.mjs` computes the update-manifest signature over the
+      final nupkg bytes.
 - [ ] **Confirm `bundle-chain` comes alive** — the scenario self-skips while
       the target shell's embedded base bundle is < 2.6.9. The base bundle
       version is only observable at runtime, so the smoke test annotates it
@@ -25,8 +34,11 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
       Once that line reads ≥ 2.6.9, check the scenario actually runs and is
       green (it has never executed for real).
 - [ ] **Decide on downgrade paths** — a user installing an older release over
-      newer state is untested. If it's unsupported, say so somewhere
-      user-visible and close this; if it's meant to work, it needs a scenario.
+      newer state is untested. Product stance (July 2026): usually works,
+      but there are cutoffs — a newer version can create items an older one
+      doesn't understand, and how to handle that has not been designed.
+      Needs that product decision (which versions must tolerate which data)
+      before a test scenario makes sense; parked until then.
 - [ ] **appimage upgrade coverage** — upgrade-validation's matrix skips
       appimage (and arm64). The targz external-install spec covers similar
       mechanics, but the single-file-replace path itself is untested. Low
