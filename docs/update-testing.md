@@ -130,3 +130,11 @@ sequenceDiagram
 - The shell watchdog fires `loadURL()` if the renderer is quiet for 6 s; on slow
   machines that can land mid-activation and (pre-2.6.10) revive the cached
   pre-update page — the reason for the explicit CDP cache clear.
+- When every bundle-**activating** spec fails with "element(s) not found" on
+  the update-page testids right after a *successful* activation, check the
+  **version inside `artifacts/<ver>/bundle.json`**: the mock re-versions
+  whatever bundle it's given, so a stale fixture (e.g. a 2.5.x bundle cached
+  by an older fetch-artifact, which fell back to the stable pointer) activates
+  fine but renders a pre-2.6.7 UI without the testids. Specs that never
+  activate the served bundle (the shell-update ones) keep passing, which is
+  the tell. Delete the file and re-fetch.
