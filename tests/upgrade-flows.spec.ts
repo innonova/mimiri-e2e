@@ -263,6 +263,11 @@ async function squirrelShellStep(state: RunState, to: string): Promise<void> {
   // quitAndInstall hands off to Squirrel; the CDP connection dies with the
   // app, so the swap is asserted from the outside.
   await page.getByTestId("update-restart-button").click({ noWaitAfter: true });
+  // Disarm before anything relaunches: an armed pointer offering the
+  // version that is now the installed shell reads as a pending BUNDLE of
+  // that version — a state no real host produces — and wedges the boot
+  // in the update screen.
+  state.server!.setLatest(null);
 
   if (process.platform === "win32") {
     const newAppDir = path.join(squirrelRoot(), `app-${to}`);
@@ -475,6 +480,12 @@ test.describe("upgrade flows", () => {
           await runStep(state, step, rv);
         }
       } finally {
+        if (state.server && test.info().status !== test.info().expectedStatus) {
+          console.log(
+            `[upgrade-flows] update-server requests:\n  ` +
+              state.server.requests.join("\n  "),
+          );
+        }
         await cleanup(state.ctx);
         if (state.squirrelInstalled) {
           uninstallSquirrelApp();

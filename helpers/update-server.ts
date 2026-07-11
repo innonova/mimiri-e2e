@@ -642,6 +642,14 @@ export async function startPassthroughUpdateServer(opts: {
         });
         res.end(bytes);
       } else if (info) {
+        // The download step re-fetches the ARMED version's info.json and
+        // routes on its minElectronVersion (bundle vs shell installer) —
+        // serve it with the same semantics as the pointer, including for
+        // armed shell versions that have no bundle at all.
+        if (info[2] === armedVersion) {
+          json(JSON.stringify(pointerInfo()));
+          return;
+        }
         const loaded = loadBundle(info[2]);
         if (!loaded) {
           notFound();
