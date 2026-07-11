@@ -96,11 +96,15 @@ sequenceDiagram
 
 - **Windows** — the in-app updater only works from a real Squirrel layout
   (`Update.exe` next to `app-<v>` under `%LOCALAPPDATA%\mimiri_notes`), so the
-  test installs the published Setup.exe for real. The update payload is the
-  published nupkg **repacked** with a bumped nuspec version
-  (`helpers/win-squirrel.ts::repackNupkg`) — binaries unchanged; Squirrel only
-  trusts the SHA1 in the RELEASES line, which the mock computes from the
-  repacked file and raw-signs.
+  test installs a published Setup.exe for real. The preferred payload is the
+  fetched artifact's **own real nupkg**, updated to from the pinned base 2.6.9
+  — Squirrel only trusts the SHA1 in the RELEASES line, which the mock
+  computes from whatever file it serves and raw-signs, so a real package
+  works as-is and the updated binary gets proven, not just the swap. When the
+  fetched artifact *is* the base, the payload falls back to the published
+  nupkg **repacked** with a bumped nuspec version
+  (`helpers/win-squirrel.ts::repackNupkg`, binaries unchanged) so the
+  mechanism still runs.
 - **macOS** — Squirrel.Mac validates the replacement app's **code signature**,
   so no repack is possible: the test updates between two real signed releases
   (pinned base 2.6.9 in a temp dir → the fetched artifact's zip). ShipIt swaps
