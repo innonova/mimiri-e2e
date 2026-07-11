@@ -1,4 +1,5 @@
 import { test, expect, Page } from "@playwright/test";
+import { spawnSync } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -317,6 +318,50 @@ async function squirrelShellStep(state: RunState, to: string): Promise<void> {
   }
 }
 
+/**
+ * Removes the app's state from the REAL profile (real-profile mode):
+ * ~/.mimiri plus the Chromium profile (%APPDATA% on Windows, ~/Library
+ * on macOS) and, on macOS, the app's login-keychain item. Deletes only
+ * app state, never the profile itself.
+ */
+function wipeRealProfile(): void {
+  const rmOpts = {
+    recursive: true,
+    force: true,
+    maxRetries: 10,
+    retryDelay: 200,
+  };
+  fs.rmSync(path.join(os.homedir(), ".mimiri"), rmOpts);
+  if (process.platform === "win32") {
+    const appData =
+      process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming");
+    for (const name of ["Mimiri Notes", "mimiri-notes"]) {
+      fs.rmSync(path.join(appData, name), rmOpts);
+    }
+  } else if (process.platform === "darwin") {
+    for (const name of ["Mimiri Notes", "mimiri-notes"]) {
+      fs.rmSync(
+        path.join(os.homedir(), "Library", "Application Support", name),
+        rmOpts,
+      );
+    }
+    // The app keeps its encryption key in the login keychain — that is
+    // user state too. Best effort; the item may not exist.
+    for (let i = 0; i < 5; i++) {
+      const result = spawnSync("security", [
+        "delete-generic-password",
+        "-l",
+        "Mimiri Notes Key",
+      ]);
+      if (result.status !== 0) {
+        break;
+      }
+    }
+  } else {
+    throw new Error("real-profile mode is Windows/macOS-only");
+  }
+}
+
 /** Pre-flight: every artifact a scenario will touch, with fix-it hints. */
 function missingArtifacts(scenario: Scenario, rv: ResolvedVersions): string[] {
   const format = resolveFormat();
@@ -447,6 +492,22 @@ test.describe("upgrade flows", () => {
         "home-layout profile (pre-2.6.6 shell in the chain) is not " +
           "available on this platform/format",
       );
+      // Neither Windows nor macOS offers env-based home isolation:
+      // Windows resolves the profile through APIs that ignore
+      // USERPROFILE/APPDATA overrides, and macOS keeps the app's
+      // encryption key in the per-user login keychain (a fake HOME blocks
+      // boot on a "Keychain Not Found" modal). Pre-2.6.6 chains on both
+      // therefore run against the machine's REAL profile — faithful, but
+      // destructive (profile state is wiped around the run), so it needs
+      // an explicit opt-in from a disposable machine (CI runner, test VM).
+      const realProfile =
+        needsHome &&
+        (process.platform === "win32" || process.platform === "darwin");
+      test.skip(
+        realProfile && process.env.MIMIRI_REAL_PROFILE !== "1",
+        "pre-2.6.6 Windows/macOS chains use (and wipe) the machine's " +
+          "real profile — set MIMIRI_REAL_PROFILE=1 on a disposable machine",
+      );
 
       const missing = missingArtifacts(scenario, rv);
       test.skip(
@@ -458,11 +519,13 @@ test.describe("upgrade flows", () => {
       const state: RunState = {
         layout: {
           kind: needsHome ? "home" : "flag",
-          root: fs.mkdtempSync(
-            format === "snap"
-              ? path.join(os.homedir(), "mimiri-upg-")
-              : path.join(os.tmpdir(), "mimiri-upg-"),
-          ),
+          root: realProfile
+            ? os.homedir()
+            : fs.mkdtempSync(
+                format === "snap"
+                  ? path.join(os.homedir(), "mimiri-upg-")
+                  : path.join(os.tmpdir(), "mimiri-upg-"),
+              ),
         },
         workDir: fs.mkdtempSync(path.join(os.tmpdir(), "mimiri-upg-shell-")),
         shell: "",
@@ -471,6 +534,9 @@ test.describe("upgrade flows", () => {
       };
 
       try {
+        if (realProfile) {
+          wipeRealProfile();
+        }
         const config = serverConfig(scenario, rv);
         if (config) {
           state.server = await startPassthroughUpdateServer(config);
@@ -486,7 +552,9 @@ test.describe("upgrade flows", () => {
               state.server.requests.join("\n  "),
           );
         }
-        await cleanup(state.ctx);
+        // Never let launchApp's cleanup delete the layout root — in
+        // real-profile mode it IS the user's home directory.
+        await cleanup(state.ctx, { keepUserData: true });
         if (state.squirrelInstalled) {
           uninstallSquirrelApp();
         }
@@ -494,8 +562,19 @@ test.describe("upgrade flows", () => {
           killProcessesUnder(state.workDir);
           cleanShipItCache(state.macBundleId);
         }
-        fs.rmSync(state.workDir, { recursive: true, force: true });
-        fs.rmSync(state.layout.root, { recursive: true, force: true });
+        // Windows can hold locks briefly after the process tree is killed.
+        const rmOpts = {
+          recursive: true,
+          force: true,
+          maxRetries: 10,
+          retryDelay: 200,
+        };
+        fs.rmSync(state.workDir, rmOpts);
+        if (realProfile) {
+          wipeRealProfile();
+        } else {
+          fs.rmSync(state.layout.root, rmOpts);
+        }
         await state.server?.stop();
       }
     });
