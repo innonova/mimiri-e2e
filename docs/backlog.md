@@ -6,21 +6,14 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
 
 ## Coverage gaps
 
-- [x] **Staging-sync smoke test** — done: `tests/staging-sync.spec.ts` runs
-      the full loop (account creation with real PoW, sync, fresh-profile
-      round-trip, account deletion) against dev-api. No credentials story
-      needed — accounts are random per run and deleted through the UI.
-      Requires the `MIMIRI_USE_DEV_API` shell seam (client PR #46 /
-      electron PR #15), shipped in shell 2.6.14 — but the seam also needs
-      the **dev host/key baked into the bundle at build time**, and the
-      release build's `.env` doesn't have them yet: 2.6.14's bundle bakes
-      `VITE_MIMER_DEV_API_HOST=https://app-dev-aek.mimiri.io` (stale) and
-      no `VITE_DEV_API_PUBLIC_KEY(_ID)` at all. The spec skips with an
-      explanatory reason until a bundle ships with
-      `VITE_MIMER_DEV_API_HOST=https://dev-api.mimiri.io/api` +
-      `VITE_DEV_API_PUBLIC_KEY(_ID)` (values in `.env.example`) in the
-      build environment — watch for the skip disappearing in the CI
-      summary.
+- [x] **Staging-sync smoke test** — done and **live**: `tests/staging-sync.spec.ts`
+      runs the full loop (account creation with real PoW, sync,
+      fresh-profile round-trip, account deletion) against dev-api,
+      verified green against published shell 2.6.15 (bundle 2.6.9 — the
+      first with the `MIMIRI_USE_DEV_API` seam _and_ the dev host/key pair
+      baked in). No credentials story needed — accounts are random per run
+      and deleted through the UI. On builds without the seam or the baked
+      dev config the spec skips with an explanatory reason.
 - [ ] **Sign the binaries inside the nupkg** _(mimiri-client-electron /
       build pipeline, not this repo)_ — only `Setup.exe` carries the
       innonova GmbH Authenticode signature. The app exe,
@@ -36,12 +29,15 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
       during `npm run make` unless the token's PIN caching is enabled. It
       must run **before** `rename-packages.mjs` computes the update-manifest
       signature over the final nupkg bytes.
-- [ ] **Confirm `bundle-chain` comes alive** — the scenario self-skips while
-      the target shell's embedded base bundle is < 2.6.9. The base bundle
-      version is only observable at runtime, so the smoke test annotates it
-      and the CI step summary now shows it ("Embedded base bundle: x.y.z").
-      Once that line reads ≥ 2.6.9, check the scenario actually runs and is
-      green (it has never executed for real).
+- [ ] **Confirm `bundle-chain` comes alive** — half-way there: shell 2.6.15
+      embeds base bundle 2.6.9, so the hard `< 2.6.9` gate now passes. But
+      each bundle hop also self-skips unless the offered bundle is
+      **strictly newer** than the embedded base (BundleManager discards
+      older ones), and the canary bundle stream is also at 2.6.9 — so the
+      scenario runs without performing a real bundle update until a bundle
+      \> 2.6.9 publishes while the shell still embeds 2.6.9. The CI step
+      summary shows the embedded base ("Embedded base bundle: x.y.z");
+      check the scenario actually exercises a hop once the streams diverge.
 - [ ] **Decide on downgrade paths** — a user installing an older release over
       newer state is untested. Product stance (July 2026): usually works,
       but there are cutoffs — a newer version can create items an older one
@@ -52,6 +48,23 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
       appimage (and arm64). The targz external-install spec covers similar
       mechanics, but the single-file-replace path itself is untested. Low
       priority.
+
+## Product issues found by the suite
+
+- [ ] **Data written right after account promotion can silently miss the
+      server** _(mimiri-client, found July 2026 while building
+      staging-sync)_ — a note created ~2–4 s after `promoteToCloudAccount`
+      completed did not reach the server, even though the client reported a
+      successful `/sync/push-changes` and stable sync-status `idle`; a
+      fresh profile logging in did not see the note (reproduced repeatedly
+      until the spec added a wait for sync-idle after promotion; also
+      produces "Getting Started copied" duplicates in some runs). The
+      window is however long the promotion's background copy takes — a few
+      seconds on CI with two default notes, plausibly human-reachable with
+      many notes on a slow link. Untested: whether the stranded note is
+      pushed on the app's next launch (delayed sync) or lost for good — a
+      repro that kills the app inside the window and relaunches would
+      settle it.
 
 ## Hardening / flakiness
 
