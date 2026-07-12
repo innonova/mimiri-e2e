@@ -106,6 +106,20 @@ for (const { mode, launchEnv } of dialogModes()) {
       workRoot = fs.mkdtempSync(path.join(os.tmpdir(), "mimiri-dialogs-"));
       ctx = await launchApp({ env: launchEnv });
       await enterLocalMode(ctx.page);
+      if (expectPortal) {
+        // Warm up the portal: on a cold runner the first FileChooser
+        // request can outrun the just-activated xdg-desktop-portal, and
+        // GTK silently falls back to the in-process chooser — failing the
+        // portal assertion (seen on the zero-retry nightly, even under
+        // flatpak). Open and cancel one dialog, unasserted; the probe is
+        // per-dialog, so the real tests then get the warmed portal.
+        await clickFileMenuItem(ctx, "export-notes");
+        const dialog = await waitForFileDialog({
+          appPid: ctx.process.pid!,
+          titleHint: "Export All Notes",
+        });
+        await cancelDialog(dialog);
+      }
     });
 
     test.afterAll(async () => {

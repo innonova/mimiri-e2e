@@ -118,7 +118,7 @@ async function toggleDarkMode(ctx: AppContext): Promise<void> {
     if (ctx.process.pid === undefined) {
       throw new Error("app process has no pid");
     }
-    clickNativeMenuItem(ctx.process.pid, "View", "Dark Mode");
+    await clickNativeMenuItem(ctx.process.pid, "View", "Dark Mode");
     return;
   }
   await ctx.page.getByTestId("title-menu-view").click();

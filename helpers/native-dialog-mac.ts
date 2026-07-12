@@ -49,21 +49,35 @@ function sheetExists(pid: number): boolean {
   return r.ok && r.out === "true";
 }
 
-/** Clicks an item in the app's native menu bar (macOS builds only). */
-export function clickNativeMenuItem(
+/**
+ * Clicks an item in the app's native menu bar (macOS builds only).
+ *
+ * Retried: the very first System Events interaction after launch can fail
+ * with an empty osascript error while the app's menu bar isn't registered
+ * with the window server yet — seen on the zero-retry nightly.
+ */
+export async function clickNativeMenuItem(
   pid: number,
   menu: string,
   item: string,
-): void {
-  osa(
-    `tell application "System Events" to set frontmost of ${procRef(pid)} to true`,
-  );
-  const r = osa(
-    `tell application "System Events" to tell ${procRef(pid)} to click menu item "${item}" of menu "${menu}" of menu bar 1`,
-  );
-  if (!r.ok) {
-    throw new Error(`could not click menu ${menu} > ${item}: ${r.out}`);
+): Promise<void> {
+  let lastError = "";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) {
+      await sleep(1_000);
+    }
+    osa(
+      `tell application "System Events" to set frontmost of ${procRef(pid)} to true`,
+    );
+    const r = osa(
+      `tell application "System Events" to tell ${procRef(pid)} to click menu item "${item}" of menu "${menu}" of menu bar 1`,
+    );
+    if (r.ok) {
+      return;
+    }
+    lastError = r.out;
   }
+  throw new Error(`could not click menu ${menu} > ${item}: ${lastError}`);
 }
 
 /** Polls for the NSOpenPanel sheet on the app's main window. */
