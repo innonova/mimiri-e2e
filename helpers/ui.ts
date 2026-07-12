@@ -54,7 +54,7 @@ export async function clickFileMenuItem(
     if (ctx.process.pid === undefined) {
       throw new Error("app process has no pid");
     }
-    clickNativeMenuItem(ctx.process.pid, "File", label);
+    await clickNativeMenuItem(ctx.process.pid, "File", label);
     return;
   }
   await ctx.page.getByTestId("title-menu-file").click();
@@ -73,7 +73,7 @@ export async function openCheckForUpdates(ctx: AppContext): Promise<void> {
     if (ctx.process.pid === undefined) {
       throw new Error("app process has no pid");
     }
-    clickNativeMenuItem(ctx.process.pid, "Help", "Check for updates");
+    await clickNativeMenuItem(ctx.process.pid, "Help", "Check for updates");
     return;
   }
   await ctx.page.getByTestId("title-menu-help").click();

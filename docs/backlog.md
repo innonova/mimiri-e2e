@@ -75,6 +75,12 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
       timing races (`MIMIRI_RETRIES=0`). If the 6 s renderer watchdog shows up
       as a recurring culprit, consider a client seam to extend it under
       `APP_TEST_MODE` (at the usual cost of not testing shipped behavior).
+      Night 1 (run #90): 3/10 legs, all the suite's **first native dialog
+      interaction**, not the watchdog — (a) cold `xdg-desktop-portal` loses
+      the first FileChooser race and GTK falls back in-process, even under
+      flatpak (ubuntu/appimage, arm/flatpak); (b) macOS's first System
+      Events menu click fails empty. Hardened: portal warm-up in
+      export-import's beforeAll, retries in `clickNativeMenuItem`.
 - [x] **Surface retry-passes on PR runs** — done: a JSON reporter feeds
       `scripts/report-summary.ts`, which lists flaky tests in the CI step
       summary and emits `::warning::` annotations on every run. Revisit a

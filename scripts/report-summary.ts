@@ -51,6 +51,7 @@ interface Entry {
   name: string;
   reason?: string;
 }
+const failed: Entry[] = [];
 const flaky: Entry[] = [];
 const skipped: Entry[] = [];
 let baseVersion: string | undefined;
@@ -64,6 +65,7 @@ function walk(suite: JsonSuite, trail: string[]): void {
       const skipAnnotation = (test.annotations ?? []).find(
         (a) => a.type === "skip",
       );
+      if (test.status === "unexpected") failed.push({ name });
       if (test.status === "flaky") flaky.push({ name });
       if (test.status === "skipped")
         skipped.push({ name, reason: skipAnnotation?.description });
@@ -89,6 +91,12 @@ if (baseVersion) {
     `Embedded base bundle: **${baseVersion}** ` +
       `(bundle-chain needs ≥ 2.6.9 — see docs/backlog.md)`,
   );
+}
+if (failed.length > 0) {
+  lines.push("");
+  lines.push(`### Failed`);
+  lines.push("");
+  for (const f of failed) lines.push(`- ${f.name}`);
 }
 if (flaky.length > 0) {
   lines.push("");
