@@ -49,3 +49,11 @@ jobs:
             -f target=${{ steps.watch.outputs.target_shell }} \
             -f previous=${{ steps.watch.outputs.previous_shell }} \
             -f bundle=${{ steps.watch.outputs.target_bundle }}
+
+      # A publish is also the only event that makes re-running the full suite
+      # worthwhile (there is no nightly): fetch the fresh canary and test it.
+      - name: Dispatch full e2e suite against the new publish
+        if: steps.watch.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run e2e.yml --ref ${{ github.ref_name }} -f channel=canary

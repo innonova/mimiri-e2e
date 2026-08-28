@@ -7,9 +7,13 @@ on:
         description: "Channel or version to test (stable | canary | x.y.z)"
         required: false
         default: "canary"
-  schedule:
-    # daily, catches new canary/stable publishes
-    - cron: "0 6 * * *"
+      retries:
+        description: "Playwright retries (empty = default cushion; 0 to make timing races fail loudly)"
+        required: false
+        default: ""
+  # No schedule: publishes happen weekly at best, and version-watch.yml
+  # dispatches this workflow when it detects one. Use workflow_dispatch with
+  # retries=0 to hunt timing races on demand.
   push:
     branches: [main]
   pull_request:
@@ -56,9 +60,9 @@ jobs:
     name: smoke (${{ matrix.os }}${{ matrix.format && format(', {0}', matrix.format) || '' }})
     env:
       APP_FORMAT: ${{ matrix.format || 'targz' }}
-      # The nightly runs without retries so timing races fail loudly on a
-      # schedule; pushes/PRs keep the retry cushion (empty string = default).
-      MIMIRI_RETRIES: ${{ github.event_name == 'schedule' && '0' || '' }}
+      # Pushes/PRs and publish-triggered runs keep the retry cushion; a manual
+      # dispatch can set retries=0 so timing races fail loudly.
+      MIMIRI_RETRIES: ${{ inputs.retries || '' }}
     steps:
       - uses: actions/checkout@v7
 

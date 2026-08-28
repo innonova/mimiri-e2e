@@ -92,8 +92,8 @@ artifacts/        (gitignored) downloaded + extracted builds, bundle fixtures
 
 - **Update mechanics** (`tests/update*.spec.ts`, smoke, signing, dialogs) — does
   the _fetched_ build work: launch, render, update itself (bundle and shell),
-  recover from broken state, drive native dialogs. Runs on every CI push/PR and
-  nightly against canary.
+  recover from broken state, drive native dialogs. Runs on every CI push/PR
+  and, via version-watch, on every new publish against canary.
 - **Upgrade flows** (`tests/upgrade-flows.spec.ts`, opt-in via `UPGRADE_FLOWS=1`)
   — does a _newly published_ version break **existing users**: install a real old
   release, seed notes/settings through the UI, upgrade to the new release along

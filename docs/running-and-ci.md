@@ -71,21 +71,26 @@ flowchart TD
         P --> U["upgrade-flows.spec.ts<br/>UPGRADE_FLOWS=1, MIMIRI_REAL_PROFILE=1<br/>win | mac | ubuntu × targz/flatpak/snap"]
     end
 
-    subgraph e2e["e2e.yml — push, PR, nightly, manual"]
+    subgraph e2e["e2e.yml — push, PR, publish (via version-watch), manual"]
         F["npm run fetch -- &lt;channel&gt;"]
         F --> T["npm test (full suite)<br/>win | mac | ubuntu ×4 formats | ubuntu-arm ×4"]
     end
 
     D --> uv
+    C --> E["gh workflow run e2e -f channel=canary"]
+    E --> e2e
 ```
 
 - **e2e.yml** — the everyday suite. Matrix: windows-latest, macos-26,
   ubuntu-latest and ubuntu-24.04-arm each × {targz, flatpak, appimage, snap}.
   Linux legs apply the userns sysctl, run `setup-linux-dialogs.sh`, and wrap
-  the test run in `run-with-dialogs.sh`. Channel defaults to canary. The
-  nightly schedule runs with retries disabled (`MIMIRI_RETRIES=0`) so timing
-  races surface there instead of being absorbed as retry-passes. A small
-  `format` job runs `format:check`. Every leg ends with
+  the test run in `run-with-dialogs.sh`. Channel defaults to canary. There is
+  no schedule: publishes happen weekly at best, so `version-watch.yml`
+  dispatches the suite when it detects one (the former zero-retry nightly
+  only ever re-reported the suite's known timing seams and paged on them
+  daily). A manual dispatch accepts `retries=0` to make timing races fail
+  loudly when you actually want to hunt them. A small `format` job runs
+  `format:check`. Every leg ends with
   `scripts/report-summary.ts` (also in upgrade-validation.yml), which reads
   the JSON report into the step summary: flaky tests (plus `::warning::`
   annotations), the skipped list with reasons, and the shell's embedded base
@@ -111,20 +116,20 @@ can't break it again.
 
 ## Key environment variables
 
-| Var                                                                          | Meaning                                                                |
-| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `MIMIRI_VERSION` / `APP_FORMAT`                                              | which artifact to run (else `artifacts/current.json`)                  |
-| `APP_TEST_MODE=1`                                                            | set by launchApp; enables the test seam (client ≥ 2.6.5)               |
-| `MIMIRI_UPDATE_URL` / `MIMIRI_UPDATE_KEY`                                    | update-host seams (client ≥ 2.6.9); passthrough runs pass only the URL |
-| `UPGRADE_FLOWS=1`                                                            | opt into upgrade-flow specs                                            |
-| `MIMIRI_SCENARIO`                                                            | comma-separated scenario id filter                                     |
-| `MIMIRI_TARGET_VERSION` / `MIMIRI_PREVIOUS_VERSION` / `MIMIRI_TARGET_BUNDLE` | version overrides for upgrade flows                                    |
-| `MIMIRI_REAL_PROFILE=1`                                                      | allow destructive real-profile scenarios (disposable machines only)    |
-| `MIMIRI_FAKE_STORE`                                                          | fake install source for store-managed update UI tests                  |
-| `MIMIRI_USE_DEV_API=1`                                                       | app uses its compiled-in dev API host + key pair (shell > 2.6.13)      |
-| `MIMIRI_STAGING_API_URL`                                                     | expected dev host for staging-sync's network assert                    |
-| `MIMIRI_RETRIES`                                                             | overrides Playwright retries (nightly CI sets 0 to surface races)      |
-| `MIMIRI_EXPECT_PORTAL=0`                                                     | relax the Linux portal-dialog assertion                                |
+| Var                                                                          | Meaning                                                                   |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `MIMIRI_VERSION` / `APP_FORMAT`                                              | which artifact to run (else `artifacts/current.json`)                     |
+| `APP_TEST_MODE=1`                                                            | set by launchApp; enables the test seam (client ≥ 2.6.5)                  |
+| `MIMIRI_UPDATE_URL` / `MIMIRI_UPDATE_KEY`                                    | update-host seams (client ≥ 2.6.9); passthrough runs pass only the URL    |
+| `UPGRADE_FLOWS=1`                                                            | opt into upgrade-flow specs                                               |
+| `MIMIRI_SCENARIO`                                                            | comma-separated scenario id filter                                        |
+| `MIMIRI_TARGET_VERSION` / `MIMIRI_PREVIOUS_VERSION` / `MIMIRI_TARGET_BUNDLE` | version overrides for upgrade flows                                       |
+| `MIMIRI_REAL_PROFILE=1`                                                      | allow destructive real-profile scenarios (disposable machines only)       |
+| `MIMIRI_FAKE_STORE`                                                          | fake install source for store-managed update UI tests                     |
+| `MIMIRI_USE_DEV_API=1`                                                       | app uses its compiled-in dev API host + key pair (shell > 2.6.13)         |
+| `MIMIRI_STAGING_API_URL`                                                     | expected dev host for staging-sync's network assert                       |
+| `MIMIRI_RETRIES`                                                             | overrides Playwright retries (manual dispatch `retries=0` surfaces races) |
+| `MIMIRI_EXPECT_PORTAL=0`                                                     | relax the Linux portal-dialog assertion                                   |
 
 ## Test machines (for cross-OS work from this repo)
 
