@@ -128,7 +128,11 @@ can't break it again.
 
 ## Test machines (for cross-OS work from this repo)
 
-Documented in detail in [CLAUDE.md](../CLAUDE.md#machines); in short:
+What any macOS/Windows/Linux box needs (TCC grants, keychain over SSH, no
+biometrics in VMs, session 0 on Windows) is in
+[test-machines.md](test-machines.md). Which machines exist is specific to a
+developer's setup and lives outside the repo (for Claude: the user-level
+`~/.claude/CLAUDE.md`). Currently:
 
 - **this Linux box** — headless Ubuntu 24.04, fully provisioned.
 - **`ssh macvm`** — disposable macOS arm64 VM, the default macOS target; full
