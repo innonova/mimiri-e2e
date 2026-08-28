@@ -200,9 +200,11 @@ export class MacScreenRecorder {
     ];
     if (region) {
       const r = (n: number) => Math.round(n * scale);
+      // yuv420p (libx264) needs even dimensions.
+      const even = (n: number) => r(n) - (r(n) % 2);
       args.push(
         "-vf",
-        `crop=${r(region.w)}:${r(region.h)}:${r(region.x)}:${r(region.y)}`,
+        `crop=${even(region.w)}:${even(region.h)}:${r(region.x)}:${r(region.y)}`,
       );
     }
     args.push(
