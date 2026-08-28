@@ -131,6 +131,21 @@ can't break it again.
 | `MIMIRI_RETRIES`                                                             | overrides Playwright retries (manual dispatch `retries=0` surfaces races) |
 | `MIMIRI_EXPECT_PORTAL=0`                                                     | relax the Linux portal-dialog assertion                                   |
 
+## PR media (screenshots, GIFs, recordings)
+
+`scripts/pr-media.sh [-r <repo>] [-c <caption>] <file>...` uploads captures to
+the media host and prints the markdown to paste into a pull request. Files are
+content-addressed (`<sha12>.<ext>`) under `<repo>/<yyyy-mm>/`, never
+overwritten, served with `Cache-Control: immutable`. Images and GIFs render
+inline in GitHub (fetched through Camo, so keep GIFs under ~5 MB); external
+video does not inline, so a recording is a link — convert the interesting
+seconds to a GIF with ffmpeg for the PR body.
+
+The host is a plain nginx (`root /srv/git-pr`, no listing) behind the
+haproxy that terminates TLS for `https://git-pr.mimiri.io`; where it runs is
+machine-specific (see the user-level notes). Only demo data ever goes in —
+the URLs are public and permanent.
+
 ## Test machines (for cross-OS work from this repo)
 
 What any macOS/Windows/Linux box needs (TCC grants, keychain over SSH, no
