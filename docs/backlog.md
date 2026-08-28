@@ -71,10 +71,17 @@ nightly came out of the same review — PR #11). Roughly ordered by value.
 
 ## Hardening / flakiness
 
-- [ ] **Watch the zero-retry nightly** — the scheduled run now fails loudly on
-      timing races (`MIMIRI_RETRIES=0`). If the 6 s renderer watchdog shows up
-      as a recurring culprit, consider a client seam to extend it under
-      `APP_TEST_MODE` (at the usual cost of not testing shipped behavior).
+- [x] **Watch the zero-retry nightly** — done, and retired (Aug 2026): 14
+      nights, 9 failures, zero regressions. Culprits: the cold-portal
+      FileChooser race in export-import (6, mostly arm), Squirrel holding
+      `AppData\Local\mimiri_notes` when update-shell-external wipes it on
+      Windows (3, `EPERM`), one dev-backend outage hitting staging-sync on
+      every leg, one update-repair timing on arm. The signal was spent and the
+      daily page was the only output, so the schedule is gone: the suite runs
+      on push/PR and when version-watch detects a publish; `workflow_dispatch`
+      with `retries=0` reproduces the zero-retry mode on demand. The two
+      recurring seams are real but environmental — the portal race would need
+      the AT-SPI work below; the Windows `EPERM` is Squirrel timing.
       Night 1 (run #90): 3/10 legs, all the suite's **first native dialog
       interaction**, not the watchdog — (a) cold `xdg-desktop-portal` loses
       the first FileChooser race and GTK falls back in-process, even under

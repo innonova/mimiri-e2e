@@ -2,8 +2,8 @@
 
 All specs run **serially** (`workers: 1`, `fullyParallel: false`) — the app is a
 single-instance desktop process. Global timeout is 60 s, but heavy specs raise
-their own (up to 900 s). CI retries twice — except the nightly scheduled run,
-which sets `MIMIRI_RETRIES=0` so timing races fail loudly there instead of
+their own (up to 900 s). CI retries twice; a manual dispatch with
+`retries=0` (`MIMIRI_RETRIES=0`) makes timing races fail loudly instead of
 hiding as retry-passes. Traces/screenshots/videos are kept on failure.
 
 Most specs share one skeleton: `loadMeta()` → skip if the build lacks the needed
