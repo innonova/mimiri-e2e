@@ -239,7 +239,7 @@ export class MacScreenRecorder {
         child.on("exit", () => resolve());
       }
     });
-    child.stdin?.write("q");
+    child.stdin?.write("q\n");
     await Promise.race([exited, sleep(15_000)]);
     if (child.exitCode === null) {
       child.kill("SIGKILL");
@@ -329,7 +329,7 @@ export function outputs(name: string): {
 } {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   return {
-    raw: path.join(OUT_DIR, `${name}.raw.mp4`),
+    raw: path.join(OUT_DIR, `${name}.raw.mkv`), // matroska: playable even if the recorder is killed
     mp4: path.join(OUT_DIR, `${name}.mp4`),
     gif: path.join(OUT_DIR, `${name}.gif`),
   };
