@@ -29,7 +29,7 @@ export default async function capture(): Promise<{ gif: string; mp4: string }> {
   const files = outputs("mac-login-paste");
   const ctx = await launchApp();
   const pid = ctx.process.pid!;
-  const recorder = new MacScreenRecorder(files.mov);
+  const recorder = new MacScreenRecorder(files.raw);
   try {
     const { page } = ctx;
     await enterLocalMode(page);
@@ -38,12 +38,16 @@ export default async function capture(): Promise<{ gif: string; mp4: string }> {
 
     // Menu bar (top of screen) down to the window's bottom edge.
     const win = macWindowRect(pid);
-    recorder.start({
-      x: win.x - 10,
-      y: 0,
-      w: win.w + 20,
-      h: win.y + win.h + 10,
-    });
+    const scale = await page.evaluate("window.devicePixelRatio");
+    recorder.start(
+      {
+        x: win.x - 10,
+        y: 0,
+        w: win.w + 20,
+        h: win.y + win.h + 10,
+      },
+      Number(scale) || 1,
+    );
     await pace(800);
 
     await clickNativeMenuItem(pid, "Mimiri Notes", "Log In / Switch User");
@@ -73,7 +77,7 @@ export default async function capture(): Promise<{ gif: string; mp4: string }> {
   }
   await recorder.stop();
   await cleanup(ctx);
-  toMp4(files.mov, files.mp4);
-  toGif(files.mov, files.gif, { width: 800, fps: 12 });
+  toMp4(files.raw, files.mp4);
+  toGif(files.raw, files.gif, { width: 800, fps: 12 });
   return { gif: files.gif, mp4: files.mp4 };
 }

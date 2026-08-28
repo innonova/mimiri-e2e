@@ -23,36 +23,40 @@ export const pace = (ms = 700) => sleep(ms);
  * a macOS full-screen capture does, but the app window itself doesn't
  * receive an OS cursor for synthetic pointer events either).
  */
-export async function injectCursor(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    if (document.getElementById("__demo-cursor")) {
-      return;
-    }
-    const el = document.createElement("div");
-    el.id = "__demo-cursor";
-    el.innerHTML =
-      '<svg width="22" height="30" viewBox="0 0 22 30"><path d="M2 2 L2 24 L8 18 L12 28 L16 26 L12 17 L20 17 Z" fill="#111" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>';
-    Object.assign(el.style, {
-      position: "fixed",
-      left: "-100px",
-      top: "-100px",
-      zIndex: "2147483647",
-      pointerEvents: "none",
-      transition: "left 60ms linear, top 60ms linear",
-    });
-    document.documentElement.appendChild(el);
-    const move = (e: MouseEvent) => {
-      el.style.left = `${e.clientX}px`;
-      el.style.top = `${e.clientY}px`;
-    };
-    document.addEventListener("mousemove", move, true);
-    document.addEventListener(
-      "mousedown",
-      () => (el.style.transform = "scale(0.85)"),
-      true,
-    );
-    document.addEventListener("mouseup", () => (el.style.transform = ""), true);
+// Plain JS string: tsx/esbuild would otherwise inject a `__name` helper into
+// the serialized function that does not exist inside the page.
+const CURSOR_SCRIPT = `(() => {
+  if (document.getElementById("__demo-cursor")) return;
+  const el = document.createElement("div");
+  el.id = "__demo-cursor";
+  const svgNs = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNs, "svg");
+  svg.setAttribute("width", "22");
+  svg.setAttribute("height", "30");
+  svg.setAttribute("viewBox", "0 0 22 30");
+  const p = document.createElementNS(svgNs, "path");
+  p.setAttribute("d", "M2 2 L2 24 L8 18 L12 28 L16 26 L12 17 L20 17 Z");
+  p.setAttribute("fill", "#111");
+  p.setAttribute("stroke", "#fff");
+  p.setAttribute("stroke-width", "1.5");
+  p.setAttribute("stroke-linejoin", "round");
+  svg.appendChild(p);
+  el.appendChild(svg);
+  Object.assign(el.style, {
+    position: "fixed", left: "-100px", top: "-100px", zIndex: "2147483647",
+    pointerEvents: "none", transition: "left 60ms linear, top 60ms linear",
   });
+  document.documentElement.appendChild(el);
+  document.addEventListener("mousemove", (e) => {
+    el.style.left = e.clientX + "px";
+    el.style.top = e.clientY + "px";
+  }, true);
+  document.addEventListener("mousedown", () => { el.style.transform = "scale(0.85)"; }, true);
+  document.addEventListener("mouseup", () => { el.style.transform = ""; }, true);
+})()`;
+
+export async function injectCursor(page: Page): Promise<void> {
+  await page.evaluate(CURSOR_SCRIPT);
 }
 
 /** Moves the demo cursor somewhere sensible before the first step. */
@@ -135,35 +139,68 @@ export async function macKeystroke(
   osa(`tell application "System Events" to keystroke "${key}"${using}`);
 }
 
+const FFMPEG =
+  process.platform === "darwin" ? "/opt/homebrew/bin/ffmpeg" : "ffmpeg";
+
 /**
- * Full-screen (or region) recording through macOS `screencapture -v` — the
- * only capture that includes native menus, sheets and system prompts.
- * Needs the Screen Recording grant for the SSH session's process.
+ * macOS screen recording through ffmpeg's avfoundation input — the only
+ * capture that includes native menus, sheets, system prompts and the real
+ * cursor. Stops cleanly on "q" via stdin (unlike `screencapture -v`, which
+ * needs a TTY). Needs the Screen Recording grant for the SSH session.
+ * Regions are in points; pass the display scale (devicePixelRatio) so the
+ * crop lands on the right pixels on Retina displays.
  */
 export class MacScreenRecorder {
   private child?: ChildProcess;
-  constructor(
-    private readonly file: string,
-    /** Safety cap: screencapture stops by itself after this many seconds. */
-    private readonly maxSeconds = 120,
-  ) {}
+  constructor(private readonly file: string) {}
 
-  start(region?: Rect): void {
+  start(region?: Rect, scale = 1): void {
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
     fs.rmSync(this.file, { force: true });
-    const args = ["-v", "-x", "-V", String(this.maxSeconds)];
+    const args = [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-f",
+      "avfoundation",
+      "-framerate",
+      "30",
+      "-capture_cursor",
+      "1",
+      "-pixel_format",
+      "bgr0",
+      "-i",
+      "Capture screen 0:none",
+    ];
     if (region) {
-      args.push("-R", `${region.x},${region.y},${region.w},${region.h}`);
+      const r = (n: number) => Math.round(n * scale);
+      args.push(
+        "-vf",
+        `crop=${r(region.w)}:${r(region.h)}:${r(region.x)}:${r(region.y)}`,
+      );
     }
-    args.push(this.file);
-    // Without a TTY screencapture ignores SIGINT, but it stops on any
-    // character arriving on stdin ("type any character to stop").
-    this.child = spawn("screencapture", args, {
-      stdio: ["pipe", "ignore", "ignore"],
+    args.push(
+      "-c:v",
+      "libx264",
+      "-preset",
+      "ultrafast",
+      "-crf",
+      "18",
+      "-pix_fmt",
+      "yuv420p",
+      this.file,
+    );
+    this.child = spawn(FFMPEG, args, { stdio: ["pipe", "ignore", "pipe"] });
+    let err = "";
+    this.child.stderr?.on("data", (d) => (err += d.toString()));
+    this.child.on("exit", (code) => {
+      if (code !== 0 && code !== null && !fs.existsSync(this.file)) {
+        console.error(`ffmpeg screen capture exited ${code}: ${err}`);
+      }
     });
   }
 
-  /** Stops the recording and waits for screencapture to finalise the file. */
+  /** Stops the recording and waits for ffmpeg to finalise the file. */
   async stop(): Promise<string> {
     if (!this.child) {
       throw new Error("recorder not started");
@@ -177,23 +214,19 @@ export class MacScreenRecorder {
       }
     });
     child.stdin?.write("q");
-    child.stdin?.end();
     await Promise.race([exited, sleep(15_000)]);
     if (child.exitCode === null) {
       child.kill("SIGKILL");
-    }
-    for (let i = 0; i < 50 && !fs.existsSync(this.file); i++) {
-      await sleep(100);
+      await exited;
     }
     if (!fs.existsSync(this.file)) {
-      throw new Error(`screencapture produced no file at ${this.file}`);
+      throw new Error(`screen capture produced no file at ${this.file}`);
     }
     return this.file;
   }
 }
 
-const FFMPEG =
-  process.platform === "darwin" ? "/opt/homebrew/bin/ffmpeg" : "ffmpeg";
+process.platform === "darwin" ? "/opt/homebrew/bin/ffmpeg" : "ffmpeg";
 
 /**
  * Encodes a recording as a palette-optimised GIF for a PR body (renders
