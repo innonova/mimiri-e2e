@@ -7,6 +7,7 @@ import {
   injectCursor,
   macClickShownMenuItem,
   macKeystroke,
+  macMoveWindow,
   macShowMenu,
   macWindowRect,
   outputs,
@@ -36,16 +37,14 @@ export default async function capture(): Promise<{ gif: string; mp4: string }> {
     await injectCursor(page);
     await parkCursor(page, 400, 300);
 
-    // Menu bar (top of screen) down to the window's bottom edge.
+    // Park the window at the top-left so one crop holds the menu bar titles
+    // (far left) and the whole window.
+    macMoveWindow(pid, 0, 25);
+    await pace(400);
     const win = macWindowRect(pid);
     const scale = await page.evaluate("window.devicePixelRatio");
     recorder.start(
-      {
-        x: win.x - 10,
-        y: 0,
-        w: win.w + 20,
-        h: win.y + win.h + 10,
-      },
+      { x: 0, y: 0, w: win.x + win.w + 12, h: win.y + win.h + 12 },
       Number(scale) || 1,
     );
     await pace(800);

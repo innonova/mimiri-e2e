@@ -46,8 +46,24 @@ const CURSOR_SCRIPT = `(() => {
     position: "fixed", left: "-100px", top: "-100px", zIndex: "2147483647",
     pointerEvents: "none", transition: "left 60ms linear, top 60ms linear",
   });
+  // A manual popover lives in the top layer, above modal <dialog>s and their
+  // backdrops (which would otherwise hide the cursor); re-show it whenever
+  // the set of open dialogs changes so it stays topmost.
+  el.setAttribute("popover", "manual");
+  Object.assign(el.style, { margin: "0", padding: "0", border: "0", background: "transparent", overflow: "visible", inset: "auto" });
   document.documentElement.appendChild(el);
+  let dialogs = -1;
+  const raise = () => {
+    const n = document.querySelectorAll("dialog[open]").length;
+    if (n !== dialogs) {
+      dialogs = n;
+      try { el.hidePopover(); } catch (e) {}
+      try { el.showPopover(); } catch (e) {}
+    }
+  };
+  raise();
   document.addEventListener("mousemove", (e) => {
+    raise();
     el.style.left = e.clientX + "px";
     el.style.top = e.clientY + "px";
   }, true);
@@ -84,6 +100,16 @@ export interface Rect {
   y: number;
   w: number;
   h: number;
+}
+
+/** Moves the app's main window (points), e.g. to the top-left so a crop can hold both the menu bar titles and the window. */
+export function macMoveWindow(pid: number, x: number, y: number): void {
+  const r = osa(
+    `tell application "System Events" to tell ${procRef(pid)} to set position of window 1 to {${x}, ${y}}`,
+  );
+  if (!r.ok) {
+    throw new Error(`could not move window: ${r.out}`);
+  }
 }
 
 /** Screen rectangle of the app's main window (points), via accessibility. */
