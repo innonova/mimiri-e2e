@@ -156,3 +156,6 @@ connect.sh
 .gitignore
 .claude/
 CLAUDE.md
+
+# recorded feature demos (published via scripts/pr-media.sh)
+capture/out/
