@@ -146,6 +146,29 @@ haproxy that terminates TLS for `https://git-pr.mimiri.io`; where it runs is
 machine-specific (see the user-level notes). Only demo data ever goes in —
 the URLs are public and permanent.
 
+### Recording a feature demo
+
+`npm run capture -- <name>` runs `capture/captures/<name>.ts`, which drives
+the published app with the usual helpers (`launchApp`, `enterLocalMode`, the
+mac menu helpers) at human pace, records it, and writes
+`capture/out/<name>.{gif,mp4}` plus the `pr-media.sh` line to publish them.
+`npm run capture` lists the captures. Conventions, all in `capture/lib.ts`:
+
+- **Audience is PR review**: 8–15 s, one interaction, no captions. The GIF
+  (800 px wide, 12 fps, palette-optimised) is what the PR shows inline; the
+  MP4 is linked for full quality.
+- **Cursor**: `injectCursor(page)` draws a cursor in the page that follows
+  the synthetic pointer (a top-layer popover, so it stays above modal
+  dialogs); Playwright/CDP input has no OS cursor otherwise.
+- **macOS native chrome** (menus, sheets, prompts): `MacScreenRecorder`
+  records through ffmpeg's avfoundation input, cropped to a region in
+  points. `macShowMenu` opens a menu so it is _seen_ (System Events'
+  `click menu item` acts without showing it); park the window top-left with
+  `macMoveWindow` so one crop holds the menu titles and the window. Needs
+  the Screen Recording grant for the SSH session and `brew install ffmpeg`.
+- Web-only features are better recorded with Playwright's `recordVideo` in
+  the client repo's demo project; convert with `toGif`.
+
 ## Test machines (for cross-OS work from this repo)
 
 What any macOS/Windows/Linux box needs (TCC grants, keychain over SSH, no
