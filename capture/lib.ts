@@ -217,14 +217,11 @@ export class MacScreenRecorder {
       this.file,
     );
     this.child = spawn(FFMPEG, args, { stdio: ["pipe", "ignore", "pipe"] });
-    let err = "";
-    this.child.stderr?.on("data", (d) => (err += d.toString()));
-    this.child.on("exit", (code) => {
-      if (code !== 0 && code !== null && !fs.existsSync(this.file)) {
-        console.error(`ffmpeg screen capture exited ${code}: ${err}`);
-      }
-    });
+    this.stderr = "";
+    this.child.stderr?.on("data", (d) => (this.stderr += d.toString()));
   }
+
+  private stderr = "";
 
   /** Stops the recording and waits for ffmpeg to finalise the file. */
   async stop(): Promise<string> {
@@ -245,8 +242,11 @@ export class MacScreenRecorder {
       child.kill("SIGKILL");
       await exited;
     }
-    if (!fs.existsSync(this.file)) {
-      throw new Error(`screen capture produced no file at ${this.file}`);
+    const size = fs.existsSync(this.file) ? fs.statSync(this.file).size : 0;
+    if (size < 10_000) {
+      throw new Error(
+        `screen capture produced no usable file (${size} bytes, ffmpeg exit ${child.exitCode}): ${this.stderr.trim()}`,
+      );
     }
     return this.file;
   }
