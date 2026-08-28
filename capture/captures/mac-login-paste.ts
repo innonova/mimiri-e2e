@@ -66,13 +66,13 @@ export default async function capture(): Promise<{ gif: string; mp4: string }> {
     await pace(500);
     await macKeystroke("v", ["command"]);
     await pace(1500);
-  } finally {
-    const mov = await recorder.stop().catch(() => undefined);
+  } catch (err) {
+    await recorder.stop().catch(() => undefined);
     await cleanup(ctx);
-    if (!mov) {
-      throw new Error("no recording produced");
-    }
+    throw err;
   }
+  await recorder.stop();
+  await cleanup(ctx);
   toMp4(files.mov, files.mp4);
   toGif(files.mov, files.gif, { width: 800, fps: 12 });
   return { gif: files.gif, mp4: files.mp4 };

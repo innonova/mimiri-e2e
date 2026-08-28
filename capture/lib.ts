@@ -142,32 +142,46 @@ export async function macKeystroke(
  */
 export class MacScreenRecorder {
   private child?: ChildProcess;
-  constructor(private readonly file: string) {}
+  constructor(
+    private readonly file: string,
+    /** Safety cap: screencapture stops by itself after this many seconds. */
+    private readonly maxSeconds = 120,
+  ) {}
 
   start(region?: Rect): void {
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
     fs.rmSync(this.file, { force: true });
-    const args = ["-v", "-x"];
+    const args = ["-v", "-x", "-V", String(this.maxSeconds)];
     if (region) {
       args.push("-R", `${region.x},${region.y},${region.w},${region.h}`);
     }
     args.push(this.file);
+    // Without a TTY screencapture ignores SIGINT, but it stops on any
+    // character arriving on stdin ("type any character to stop").
     this.child = spawn("screencapture", args, {
-      stdio: ["ignore", "ignore", "pipe"],
+      stdio: ["pipe", "ignore", "ignore"],
     });
   }
 
-  /** Stops the recording (screencapture finalises the file on SIGINT). */
+  /** Stops the recording and waits for screencapture to finalise the file. */
   async stop(): Promise<string> {
     if (!this.child) {
       throw new Error("recorder not started");
     }
     const child = this.child;
-    const exited = new Promise<void>((resolve) =>
-      child.on("exit", () => resolve()),
-    );
-    child.kill("SIGINT");
-    await exited;
+    const exited = new Promise<void>((resolve) => {
+      if (child.exitCode !== null) {
+        resolve();
+      } else {
+        child.on("exit", () => resolve());
+      }
+    });
+    child.stdin?.write("q");
+    child.stdin?.end();
+    await Promise.race([exited, sleep(15_000)]);
+    if (child.exitCode === null) {
+      child.kill("SIGKILL");
+    }
     for (let i = 0; i < 50 && !fs.existsSync(this.file); i++) {
       await sleep(100);
     }
