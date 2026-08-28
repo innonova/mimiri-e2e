@@ -80,6 +80,71 @@ export async function clickNativeMenuItem(
   throw new Error(`could not click menu ${menu} > ${item}: ${lastError}`);
 }
 
+/**
+ * Names of the app's menu bar menus, e.g. ["Apple", "Mimiri Notes", "File",
+ * ...]. Retried like clickNativeMenuItem: the menu bar may not be
+ * registered with the window server right after launch.
+ */
+export async function listNativeMenus(pid: number): Promise<string[]> {
+  return listWithRetry(
+    `tell application "System Events" to tell ${procRef(pid)} to get name of every menu bar item of menu bar 1`,
+  );
+}
+
+/**
+ * Item titles of one menu of the app's menu bar, in order; separators come
+ * back as "" (AppleScript's `missing value`).
+ */
+export async function listNativeMenuItems(
+  pid: number,
+  menu: string,
+): Promise<string[]> {
+  return listWithRetry(
+    `tell application "System Events" to tell ${procRef(pid)} to get name of every menu item of menu "${menu}" of menu bar 1`,
+  );
+}
+
+async function listWithRetry(script: string): Promise<string[]> {
+  let lastError = "";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) {
+      await sleep(1_000);
+    }
+    const r = osa(script);
+    if (r.ok) {
+      return r.out
+        .split(", ")
+        .map((name) => (name === "missing value" ? "" : name));
+    }
+    lastError = r.out;
+  }
+  throw new Error(`could not read the app menu: ${lastError}`);
+}
+
+/**
+ * Sends a keyboard shortcut to the app through the window server — the
+ * real path a user's Cmd+X/C/V take, including the app menu's accelerator
+ * handling (as opposed to Playwright's keyboard, which is injected into the
+ * renderer and bypasses the native menu).
+ */
+export async function pressNativeShortcut(
+  pid: number,
+  key: string,
+  modifiers: ("command" | "shift" | "option" | "control")[],
+): Promise<void> {
+  osa(
+    `tell application "System Events" to set frontmost of ${procRef(pid)} to true`,
+  );
+  await sleep(200);
+  const using = modifiers.map((m) => `${m} down`).join(", ");
+  const r = osa(
+    `tell application "System Events" to keystroke "${key}" using {${using}}`,
+  );
+  if (!r.ok) {
+    throw new Error(`could not send ${modifiers.join("+")}+${key}: ${r.out}`);
+  }
+}
+
 /** Polls for the NSOpenPanel sheet on the app's main window. */
 export async function waitForMacFileDialog(
   pid: number,

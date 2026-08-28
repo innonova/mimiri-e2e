@@ -26,6 +26,7 @@ install dirs, process lists).
 | [update-shell-external](../tests/update-shell-external.spec.ts) | website-download install-over losing data/bundle | linux, mac, win (targz)           | base 2.6.9 archive                                               |
 | [update-shell-pkgmgr](../tests/update-shell-pkgmgr.spec.ts)     | flatpak/snap upgrade losing data/bundle          | linux (flatpak, snap)             | base 2.6.9 package                                               |
 | [mac-signing](../tests/mac-signing.spec.ts)                     | unsigned / un-notarized .app bricking downloads  | mac only                          | fetched .app                                                     |
+| [mac-menu](../tests/mac-menu.spec.ts)                           | broken native menu bar (paste, standard entries) | mac only                          | System Events grants; shell ≥ 2.6.21, bundle ≥ 2.6.22/2.6.23     |
 | [win-signing](../tests/win-signing.spec.ts)                     | unsigned Setup.exe tripping SmartScreen          | win only                          | fetched Setup.exe                                                |
 | [export-import](../tests/export-import.spec.ts)                 | broken real native file dialogs                  | all (with dialog env)             | see [native-dialogs.md](native-dialogs.md)                       |
 | [staging-sync](../tests/staging-sync.spec.ts)                   | shipped build broken against a real backend      | all                               | shell with `MIMIRI_USE_DEV_API` (> 2.6.13), dev backend up       |
@@ -121,6 +122,21 @@ and `xcrun stapler validate` against the fetched `.app`. This is the piece the
 upgrade harness can't cover (its downloads carry no quarantine xattr) — a
 broken signature would brick real browser downloads while everything else
 stayed green.
+
+### mac-menu.spec.ts
+
+The macOS build replaces Electron's default application menu with a
+role-less template built by the client, which has bitten twice: the custom
+Edit items claimed Cmd+X/C/V so text fields outside the note editor (login
+password, PIN) silently lost paste, and the standard macOS entries
+(Services, Hide, Hide Others, Show All, the Window menu) were missing. The
+spec reads the real menu bar through System Events and asserts the
+application menu and Window menu contents (shell ≥ 2.6.21, bundle ≥ 2.6.23),
+the login dialog's quit hint, and that Edit ▸ Paste, a window-server Cmd+V
+and Edit ▸ Copy work on the login dialog's fields (bundle ≥ 2.6.22). Bundle
+and shell are separate streams: the running bundle version is read from the
+login dialog and each case skips with the reason when the build predates
+the feature. Needs the same TCC grants as the native dialog tests.
 
 ### win-signing.spec.ts
 
