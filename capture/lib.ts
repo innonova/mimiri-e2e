@@ -297,13 +297,13 @@ export function toMp4(
 }
 
 export function outputs(name: string): {
-  mov: string;
+  raw: string;
   mp4: string;
   gif: string;
 } {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   return {
-    mov: path.join(OUT_DIR, `${name}.mov`),
+    raw: path.join(OUT_DIR, `${name}.raw.mp4`),
     mp4: path.join(OUT_DIR, `${name}.mp4`),
     gif: path.join(OUT_DIR, `${name}.gif`),
   };
