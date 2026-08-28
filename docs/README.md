@@ -13,16 +13,17 @@ main-process access from tests — no dialog stubbing, no Electron API calls. Se
 
 ## Where to go
 
-| Page                                                           | What it covers                                                                                     |
-| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| [architecture.md](architecture.md)                             | How the app is launched and attached, helper layering, profile isolation per platform              |
-| [test-catalog.md](test-catalog.md)                             | Every spec file: what it protects against, how it's gated, what it does                            |
-| [update-testing.md](update-testing.md)                         | The mock update server, bundle vs. shell updates, signing, the rename cascade                      |
-| [upgrade-flows.md](upgrade-flows.md)                           | The release-validation matrix: real old version → real new version with seeded user state          |
-| [native-dialogs.md](native-dialogs.md)                         | Driving real file dialogs on Linux (xdotool), macOS (System Events), Windows (UIA)                 |
-| [running-and-ci.md](running-and-ci.md)                         | Running locally, env vars, npm scripts, the three GitHub workflows and how they chain              |
-| [testing-unreleased-changes.md](testing-unreleased-changes.md) | Sibling-repo release mechanics and recipes for e2e-testing client/shell changes pre-release        |
-| [backlog.md](backlog.md)                                       | Open improvement items from the fit-for-purpose review: coverage gaps, hardening, recurring upkeep |
+| Page                                                           | What it covers                                                                                                 |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| [architecture.md](architecture.md)                             | How the app is launched and attached, helper layering, profile isolation per platform                          |
+| [test-catalog.md](test-catalog.md)                             | Every spec file: what it protects against, how it's gated, what it does                                        |
+| [update-testing.md](update-testing.md)                         | The mock update server, bundle vs. shell updates, signing, the rename cascade                                  |
+| [upgrade-flows.md](upgrade-flows.md)                           | The release-validation matrix: real old version → real new version with seeded user state                      |
+| [native-dialogs.md](native-dialogs.md)                         | Driving real file dialogs on Linux (xdotool), macOS (System Events), Windows (UIA)                             |
+| [running-and-ci.md](running-and-ci.md)                         | Running locally, env vars, npm scripts, the three GitHub workflows and how they chain                          |
+| [test-machines.md](test-machines.md)                           | What any macOS/Windows/Linux box needs to drive the app over SSH: TCC, keychain, no Touch ID in VMs, session 0 |
+| [testing-unreleased-changes.md](testing-unreleased-changes.md) | Sibling-repo release mechanics and recipes for e2e-testing client/shell changes pre-release                    |
+| [backlog.md](backlog.md)                                       | Open improvement items from the fit-for-purpose review: coverage gaps, hardening, recurring upkeep             |
 
 ## The big picture
 
