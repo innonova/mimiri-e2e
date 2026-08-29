@@ -18,6 +18,7 @@
     "fetch:canary": "tsx scripts/fetch-artifact.ts canary",
     "prepare-upgrade": "tsx scripts/prepare-upgrade-artifacts.ts",
     "watch-versions": "tsx scripts/version-watch.ts --dry-run",
+    "capture": "tsx capture/run.ts",
     "test": "playwright test",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
