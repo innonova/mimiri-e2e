@@ -1,7 +1,7 @@
 import { spawn, spawnSync, ChildProcess } from "child_process";
 import fs from "fs";
 import path from "path";
-import { Page } from "playwright";
+import { Browser, Page, chromium } from "playwright";
 
 /**
  * Helpers for recording short feature demos for pull requests (see
@@ -163,6 +163,96 @@ export async function macKeystroke(
     ? ` using {${modifiers.map((m) => `${m} down`).join(", ")}}`
     : "";
   osa(`tell application "System Events" to keystroke "${key}"${using}`);
+}
+
+/**
+ * A running app for captures that cannot use a published build yet (e.g. a
+ * host seam that has not shipped): a dev Electron checkout started with
+ * `npx electron .`, attached over CDP like launchApp does.
+ */
+export interface DevShell {
+  browser: Browser;
+  page: Page;
+  process: ChildProcess;
+  /** pid of the Electron main process (for System Events), not of npx. */
+  pid: number;
+  close(): Promise<void>;
+}
+
+export async function launchDevShell(
+  dir: string,
+  env: Record<string, string> = {},
+): Promise<DevShell> {
+  const mergedEnv: NodeJS.ProcessEnv = { ...process.env, ...env };
+  delete mergedEnv.ELECTRON_RUN_AS_NODE;
+  const child = spawn("npx", ["electron", ".", "--remote-debugging-port=0"], {
+    cwd: dir,
+    env: mergedEnv,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const wsUrl = await new Promise<string>((resolve, reject) => {
+    let out = "";
+    const timer = setTimeout(
+      () => reject(new Error(`no DevTools endpoint from dev shell:\n${out}`)),
+      60_000,
+    );
+    const onData = (chunk: Buffer) => {
+      out += chunk.toString();
+      const m = out.match(/DevTools listening on (ws:\/\/\S+)/);
+      if (m) {
+        clearTimeout(timer);
+        resolve(m[1]);
+      }
+    };
+    child.stdout?.on("data", onData);
+    child.stderr?.on("data", onData);
+    child.on("exit", (code) => {
+      clearTimeout(timer);
+      reject(new Error(`dev shell exited ${code}:\n${out}`));
+    });
+  });
+  const browser = await chromium.connectOverCDP(wsUrl);
+  let page: Page | undefined;
+  for (let i = 0; i < 300 && !page; i++) {
+    page = browser
+      .contexts()
+      .flatMap((c) => c.pages())
+      .find((p) => p.url().includes("index.html"));
+    if (!page) {
+      await sleep(100);
+    }
+  }
+  if (!page) {
+    throw new Error("dev shell showed no app page");
+  }
+  // npx -> node -> Electron: find the Electron main process under `dir`.
+  const pg = spawnSync(
+    "pgrep",
+    [
+      "-n",
+      "-f",
+      `${dir}/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron`,
+    ],
+    { encoding: "utf8" },
+  );
+  const pid = Number(pg.stdout.trim());
+  if (!pid) {
+    throw new Error("could not find the Electron main process");
+  }
+  return {
+    browser,
+    page,
+    process: child,
+    pid,
+    async close() {
+      await browser.close().catch(() => undefined);
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {}
+      child.kill("SIGKILL");
+      await sleep(500);
+    },
+  };
 }
 
 const FFMPEG =
