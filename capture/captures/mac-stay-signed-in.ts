@@ -15,11 +15,11 @@ import {
 } from "../lib";
 
 /**
- * macOS: "Stay signed in with Touch ID" (mimiri-client#58,
- * mimiri-client-electron#18). Opt in under Settings › General, quit,
- * relaunch → the Touch ID prompt stands between the app and the notes;
- * confirm → back in without the login dialog. Then once more with Cancel →
- * the password dialog.
+ * macOS: "Stay signed in with Touch ID" (mimiri-client#58/#61,
+ * mimiri-client-electron#18). Tick the box on the login dialog (the
+ * close-vs-quit hint disappears), log in, quit, relaunch → the Touch ID
+ * prompt stands between the app and the notes; confirm → back in without
+ * the login dialog. Then once more with Cancel → the password dialog.
  *
  * Biometrics do not exist in VMs, so the host's MIMIRI_FAKE_TOUCH_ID=dialog
  * test seam draws a stand-in prompt. Until a shell with the seam is
@@ -42,32 +42,45 @@ export default async function capture(): Promise<{ gif: string; mp4: string }> {
   const username = `demo_${Date.now().toString(36)}`;
   const password = "correct-horse-battery-staple";
 
-  // --- setup (not recorded): a password-protected local account
+  // --- setup (not recorded): a password-protected local account, then log
+  // out so the login dialog is what the recording starts on
   let app = await launchDevShell(dir, env);
   await waitReady(app.page);
   await createLocalAccount(app.page, username, password);
+  await app.page.getByTestId("account-button").click();
   await app.page
-    .getByTestId("node-getting-started")
-    .first()
-    .click()
-    .catch(() => undefined);
+    .getByTestId("menu-logout")
+    .waitFor({ state: "visible", timeout: 5000 });
+  await app.page.getByTestId("menu-logout").click();
+  await app.page
+    .getByTestId("login-dialog")
+    .waitFor({ state: "visible", timeout: 15_000 });
   await injectCursor(app.page);
-  await parkCursor(app.page, 420, 380);
+  await parkCursor(app.page, 420, 330);
   const win = macWindowRect(app.pid);
   const region = { x: win.x - 12, y: win.y - 40, w: win.w + 24, h: win.h + 52 };
   const scale = Number(await app.page.evaluate("window.devicePixelRatio")) || 1;
 
   try {
     recorder.start(region, scale);
-    await pace(900);
+    await pace(1000);
 
-    // --- opt in
-    await openSettingsGeneral(app.page);
-    await pace(700);
-    await app.page.getByTestId("stay-signed-in").click();
-    await pace(700);
-    await app.page.getByTestId("settings-general-save").click();
-    await pace(1200);
+    // --- opt in right on the login dialog, then log in
+    const dialog = app.page.getByTestId("login-dialog");
+    await dialog.getByTestId("stay-signed-in-login").click();
+    await pace(1200); // the close-vs-quit hint goes away
+    await dialog.getByTestId("username-input").click();
+    await app.page.keyboard.type(username, { delay: 45 });
+    await dialog.getByTestId("password-input").click();
+    await app.page.keyboard.type(password, { delay: 35 });
+    await pace(500);
+    await dialog
+      .locator(
+        'button[data-testid="login-button"], [data-testid="login-button"] button',
+      )
+      .click();
+    await dialog.waitFor({ state: "hidden", timeout: 30_000 });
+    await pace(1500);
 
     // --- quit, relaunch: the (simulated) Touch ID prompt, confirm
     await macKeystroke("q", ["command"]);
@@ -76,7 +89,6 @@ export default async function capture(): Promise<{ gif: string; mp4: string }> {
     await pace(1500); // the prompt is up during boot
     await macKeystroke("\r"); // "Use Touch ID" is the default button
     await waitReady(app.page);
-    await injectCursor(app.page);
     await pace(2200);
 
     // --- again, this time Cancel → the password dialog instead
@@ -144,26 +156,4 @@ async function createLocalAccount(
     .click();
   await view.waitFor({ state: "hidden", timeout: 60_000 });
   await sleep(1500);
-}
-
-async function openSettingsGeneral(page: Page): Promise<void> {
-  const target = page.getByTestId("node-settings-general");
-  for (const expander of [
-    "node-control-panel-closed",
-    "node-settings-group-closed",
-  ]) {
-    if (await target.isVisible()) {
-      break;
-    }
-    const toggle = page.getByTestId(expander);
-    if (await toggle.isVisible()) {
-      await toggle.click();
-      await pace(500);
-    }
-  }
-  await target.waitFor({ state: "visible", timeout: 5000 });
-  await target.click();
-  await page
-    .getByTestId("stay-signed-in")
-    .waitFor({ state: "visible", timeout: 5000 });
 }
